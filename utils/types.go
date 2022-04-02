@@ -1,3 +1,3 @@
 package utils
 
-type StringMap map[string]interface{}
+type StringMap = map[string]interface{}
