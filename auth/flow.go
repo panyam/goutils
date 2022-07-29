@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"log"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -19,54 +19,46 @@ type RequestHandler = func(ctx *gin.Context)
 type AuthFlowCallback = func(authFlow *AuthFlow, ctx *gin.Context)
 type AuthFlowCredentialsReceived = func(ctx *gin.Context)
 type IdentityFromProfileFunc = func(profile map[string]interface{}) IdentityInterface
-type AuthFlowContinueFunc = func(authFlow *AuthFlow, ctx *gin.Context)
+type AuthFlowSucceededFunc = func(authFlow *AuthFlow, ctx *gin.Context)
+type AuthFlowFailedFunc = func(authFlow *AuthFlow, ctx *gin.Context)
 type AuthFlowIdentityEnsured = func(channel *Channel, identity *Identity)
 
-type EnsureLoginConfig struct {
-	GetRedirURL   func(ctx *gin.Context) string
-	UserParamName string
-}
-
-func DefaultEnsureLoginConfig() *EnsureLoginConfig {
-	return &EnsureLoginConfig{
-		GetRedirURL:   func(ctx *gin.Context) string { return "/auth/login" },
-		UserParamName: "loggedInUser",
-	}
-}
-
-func encodeURIComponent(str string) string {
-	r := url.QueryEscape(str)
-	r = strings.Replace(r, "+", "%20", -1)
-	return r
-}
-
 /**
- * Redirects users to login screen of they are not logged in
- * @param req Request object
- * @param res Response object
- * @param next next function
+ * A class that handles the multi step auth flow for verifying (and identifying) an
+ * identity.
+ *
+ * The general workflow is as follows:
+ *
+ * 1. A user tries to access a resource at url ResourceUrl
+ * 2. The request handler for ResourceUrl decides user is either not authenticated or
+ *		not authorized
+ *    - A user can be logged in but may require a different Agent or Role to be handy
+ *			to authorize access.
+ *    - The Authorizer will be redirected to at this point - getAuthorizer(ResourceUrl).startAuth(this);
+ * 3. The Authorizer here may perform the auth without any control of "us".
+ * 4. If Auth fails, the Authorizer will call back our failure endpoint.
+ * 5. If AUth succeeds, the Authorizer will call our callback endpoint;
+ *
+ * General flow goes as follows:
+ *
+ * 1. User Visits  /xyz
+ * 2. Request handler for /xyz kicks off an auth if not logged in (more in step 10).
+ * 3. Handler(/xyz) redirects to /auth/login?callbackURL=<callbackURL>
+ * 4. User selects one of the login types /auth/<provider>/login?callbackURL=<callbackURL>
+ * 5. Login handler creates a new authFlow instance and saves it in the
+ *    session.  This will be used later.  In (3) instead of a callbackURL
+ *    an authFlow can also be provided in which a new AuthFlow wont be
+ *    created.
+ * 6. Here passport forwards off to the provider login callback to
+ *    perform all manner of logins.
+ * 7. After login is completed the callback URL is called with credentials
+ *    (or failures in which case failure redirect is called).
+ * 8. Here continueAuthFlow is called with a successful auth flow.
+ * 9. Here we have the chance to handle the channel that was created
+ *      - saved as req.currChannel
+ * 10. Now is a chance to create req.loggedInUser so it is available for
+ *     other requests going forward.
  */
-func (auth *Authenticator) EnsureLogin(config *EnsureLoginConfig, wrapped RequestHandler) RequestHandler {
-	if config != nil {
-		config = DefaultEnsureLoginConfig()
-	}
-	return func(ctx *gin.Context) {
-		session := sessions.Default(ctx)
-		userParam := session.Get(config.UserParamName)
-		if userParam == "" || userParam == nil {
-			// Redirect to a login if user not logged in
-			// `/${config.redirectURLPrefix || "auth"}/login?callbackURL=${encodeURIComponent(req.originalUrl)}`;
-			redirUrl := config.GetRedirURL(ctx)
-			originalUrl := ctx.Request.URL.Path
-			encodedUrl := encodeURIComponent(originalUrl)
-			fullRedirUrl := fmt.Sprintf("%s?callback?callbackURL=%s", redirUrl, encodedUrl)
-			ctx.Redirect(http.StatusFound, fullRedirUrl)
-		} else {
-			wrapped(ctx)
-		}
-	}
-}
-
 type Authenticator struct {
 	Provider      string
 	ChannelStore  ChannelStore
@@ -108,7 +100,8 @@ type Authenticator struct {
 	 * callback allows the user to resume the original purpose of the auth flow.
 	 * If this method is not provided then a simple redirect to "/" is performed.
 	 */
-	ContinueAuthFlow AuthFlowContinueFunc
+	OnAuthFlowSucceeded AuthFlowSucceededFunc
+	OnAuthFlowFailed    AuthFlowFailedFunc
 }
 
 /**
@@ -126,7 +119,7 @@ func (auth *Authenticator) StartAuthFlow(ctx *gin.Context) {
 	} else {
 		// Save the auth flow so we can associate all requests together
 		session := sessions.Default(ctx)
-		session.Set("authFlowId", authFlow.Id)
+		session.Set("authFlowId", authFlow.ID)
 		session.Save()
 
 		// Kick off an auth we can have different kinds of auth
@@ -197,21 +190,47 @@ func (auth *Authenticator) AuthFlowVerified(ctx *gin.Context, tokens map[string]
  * Step 4. After auth is successful this method is called to resume the
  * auth flow for the original purpose it was kicked off.
  */
-func (auth *Authenticator) AuthFlowCompleted(ctx *gin.Context) {
+func (auth *Authenticator) AuthFlowSucceeded(ctx *gin.Context) {
 	// Successful authentication, redirect success.
+	auth.AuthFlowCompleted(true, ctx)
+}
+
+/**
+ * Step 4b. Instead of step 4, this is called (by the provider)
+ * if auth failed.
+ */
+func (auth *Authenticator) AuthFlowFailed(ctx *gin.Context) {
+	auth.AuthFlowCompleted(false, ctx)
+}
+
+func (auth *Authenticator) AuthFlowCompleted(success bool, ctx *gin.Context) {
 	q := ctx.Request.URL.Query()
 	authFlowId := strings.Trim(q["state"][0], " ")
-	authFlow := auth.AuthFlowStore.GetAuthFlowById(authFlowId)
+	authFlow, err := auth.AuthFlowStore.GetAuthFlowById(authFlowId)
+	if err != nil {
+		log.Println("Error getting auth flow id: ", authFlowId, err)
+	}
 
 	// We are done with the AuthFlow so clean it up
 	session := sessions.Default(ctx)
 	session.Set("authFlowId", nil)
 	session.Save()
 
-	if authFlow != nil && auth.ContinueAuthFlow != nil {
-		auth.ContinueAuthFlow(authFlow, ctx)
+	if success {
+		if authFlow != nil && auth.OnAuthFlowSucceeded != nil {
+			auth.OnAuthFlowSucceeded(authFlow, ctx)
+		} else {
+			ctx.Redirect(http.StatusFound, "/")
+		}
 	} else {
-		ctx.Redirect(http.StatusFound, "/")
+		if auth.OnAuthFlowFailed != nil {
+			auth.OnAuthFlowFailed(authFlow, ctx)
+		} else {
+			ctx.JSON(http.StatusForbidden, gin.H{
+				"error":   "Forbidden",
+				"message": fmt.Sprintf("Login Failed for Provider: %s", auth.Provider),
+			})
+		}
 	}
 }
 
@@ -231,7 +250,11 @@ func (auth *Authenticator) EnsureAuthFlow(authFlowId string, callbackURL string)
 			},
 		)
 	} else {
-		authFlow = auth.AuthFlowStore.GetAuthFlowById(authFlowId)
+		var err error
+		authFlow, err = auth.AuthFlowStore.GetAuthFlowById(authFlowId)
+		if err != nil {
+			log.Println("Error getting authflow: ", authFlowId, err)
+		}
 	}
 	if authFlow == nil || authFlow.Provider != auth.Provider {
 		return nil

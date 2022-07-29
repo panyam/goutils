@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"github.com/panyam/goutils/dal"
+	"github.com/panyam/goutils/utils"
 	"strings"
 	"time"
 )
@@ -18,17 +19,28 @@ type Identity struct {
 	dal.BaseEntity
 
 	// Type of identity being verified (eg email, phone etc).
-	IdentityType string
+	IdentityType string `gorm:"primaryKey"`
 
 	// The key specific to the identity (eg an email address or a phone number etc).
 	//
 	// type + key should be unique through out the system.
-	IdentityKey string
+	IdentityKey string `gorm:"primaryKey"`
 
 	// The primary user that this identity can be associated with.
 	// Identities do not need to be explicitly associted with a user especially
 	// in systems where a single Identity can be used to front several users
 	PrimaryUser string
+}
+
+func NewIdentity(idType string, idKey string) *Identity {
+	out := Identity{
+		IdentityType: idType,
+		IdentityKey:  idKey,
+		BaseEntity: dal.BaseEntity{
+			CreatedAt: time.Now(),
+		},
+	}
+	return &out
 }
 
 func (id *Identity) HasUser() bool {
@@ -50,7 +62,8 @@ func (id *Identity) Key() string {
  * the system.  The User can also mean a user profile and can be extended
  * to be customized by the user of this library in their own specific app.
  */
-type User struct {
+/*
+type User2 struct {
 	dal.BaseEntity
 
 	// A globally unique user ID.  This User ID cannot be used as a login key.
@@ -60,19 +73,20 @@ type User struct {
 	// a particular user.
 	Id string
 
-	ProfileData map[string]interface{}
+	ProfileData utils.StringMap
 }
 
 // And others things here
-func (user *User) HasKey() bool {
+func (user *User2) HasKey() bool {
 	return strings.Trim(user.Id, " ") != ""
 }
+*/
 
 type AuthFlow struct {
 	dal.BaseEntity
 
 	// A unique Auth Session ID
-	Id string
+	ID string
 
 	// Kind of login being done
 	Provider string
@@ -87,12 +101,12 @@ type AuthFlow struct {
 	HandlerName string // "login"
 
 	// Parameters for the handler to continue with.
-	HandlerParams map[string]interface{}
+	HandlerParams utils.StringMap
 }
 
 // And others things here
 func (af *AuthFlow) HasKey() bool {
-	return strings.Trim(af.Id, " ") != ""
+	return strings.Trim(af.ID, " ") != ""
 }
 
 /**
@@ -103,26 +117,37 @@ func (af *AuthFlow) HasKey() bool {
 type Channel struct {
 	dal.BaseEntity
 
-	Provider string
-	LoginId  string
+	Provider string `gorm:"primaryKey"`
+	LoginId  string `gorm:"primaryKey"`
 
 	/**
-	 * Credentials for this channel (like access tokens, passwords etc).
+	 * Credentials for this channel (like access tokens, hashed passwords etc).
 	 */
-	Credentials map[string]interface{}
+	Credentials dal.JsonField
 
 	/**
 	 * Profile as passed by the provider of the channel.
 	 */
-	Profile map[string]interface{}
+	Profile dal.JsonField
 
 	/**
 	 * When does this channel expire and needs another login/auth.
 	 */
-	ExpiresIn time.Time
+	ExpiresAt time.Time
 
 	// The identity that this channel is verifying.
 	IdentityKey string
+}
+
+func NewChannel(provider string, loginId string, params utils.StringMap) *Channel {
+	out := Channel{
+		Provider: provider,
+		LoginId:  loginId,
+		BaseEntity: dal.BaseEntity{
+			CreatedAt: time.Now(),
+		},
+	}
+	return &out
 }
 
 func (ch *Channel) HasIdentity() bool {
@@ -150,27 +175,8 @@ type CallbackRequest struct {
 	rawBody string
 
 	// Headers for this request
-	Headers map[string]interface{}
+	Headers utils.StringMap
 }
-
-/*
-  constructor(config: any) {
-    config = config || {};
-    this.hostname = config.hostname;
-    this.path = config.path || "/";
-    if (config.url && config.url.length > 0) {
-      // parse hostnamea and path from url
-      if (config.url.indexOf("://") < 0) {
-        throw new Error("Invalid URL: " + config.url + ".  Please use hostname and path instead.");
-      }
-      const u = new URL(config.url);
-      console.log("Parsed URL: ", u);
-    }
-    this.method = config.method || "GET";
-    this.headers = config.headers || {};
-    this.rawBody = config.rawBody || "";
-  }
-*/
 
 func (c *CallbackRequest) FullURL() string {
 	if !strings.HasSuffix(c.Hostname, "/") && !strings.HasPrefix(c.Path, "/") {

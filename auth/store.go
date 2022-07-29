@@ -1,14 +1,18 @@
 package auth
 
+import (
+	"github.com/panyam/goutils/utils"
+)
+
 // Our store interfaces for where these are all stored
 
 type ChannelStore interface {
-	SaveChannel(channel *Channel) *Channel
-	EnsureChannel(provider string, loginId string, params map[string]interface{}) (*Channel, bool)
+	SaveChannel(channel *Channel) error
+	EnsureChannel(provider string, loginId string, params utils.StringMap) (*Channel, bool)
 }
 
 type AuthFlowStore interface {
-	GetAuthFlowById(authFlowId string) *AuthFlow
+	GetAuthFlowById(authFlowId string) (*AuthFlow, error)
 	DeleteAuthFlowById(authFlowId string) bool
 	/**
 	 * Creates a new auth session object to track a login request.
@@ -17,5 +21,5 @@ type AuthFlowStore interface {
 }
 
 type IdentityStore interface {
-	EnsureIdentity(identityType string, identityKey string, params map[string]interface{}) (*Identity, bool)
+	EnsureIdentity(identityType string, identityKey string, params utils.StringMap) (*Identity, bool)
 }

@@ -6,7 +6,6 @@ import (
 )
 
 type BaseEntity struct {
-	IsActive  bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
