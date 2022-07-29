@@ -1,9 +1,12 @@
 package auth
 
 import (
+	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"net/url"
+	"strings"
 )
 
 type IdentityInterface struct {
@@ -18,6 +21,51 @@ type AuthFlowCredentialsReceived = func(ctx *gin.Context)
 type IdentityFromProfileFunc = func(profile map[string]interface{}) IdentityInterface
 type AuthFlowContinueFunc = func(authFlow *AuthFlow, ctx *gin.Context)
 type AuthFlowIdentityEnsured = func(channel *Channel, identity *Identity)
+
+type EnsureLoginConfig struct {
+	GetRedirURL   func(ctx *gin.Context) string
+	UserParamName string
+}
+
+func DefaultEnsureLoginConfig() *EnsureLoginConfig {
+	return &EnsureLoginConfig{
+		GetRedirURL:   func(ctx *gin.Context) string { return "/auth/login" },
+		UserParamName: "loggedInUser",
+	}
+}
+
+func encodeURIComponent(str string) string {
+	r := url.QueryEscape(str)
+	r = strings.Replace(r, "+", "%20", -1)
+	return r
+}
+
+/**
+ * Redirects users to login screen of they are not logged in
+ * @param req Request object
+ * @param res Response object
+ * @param next next function
+ */
+func (auth *Authenticator) EnsureLogin(config *EnsureLoginConfig, wrapped RequestHandler) RequestHandler {
+	if config != nil {
+		config = DefaultEnsureLoginConfig()
+	}
+	return func(ctx *gin.Context) {
+		session := sessions.Default(ctx)
+		userParam := session.Get(config.UserParamName)
+		if userParam == "" || userParam == nil {
+			// Redirect to a login if user not logged in
+			// `/${config.redirectURLPrefix || "auth"}/login?callbackURL=${encodeURIComponent(req.originalUrl)}`;
+			redirUrl := config.GetRedirURL(ctx)
+			originalUrl := ctx.Request.URL.Path
+			encodedUrl := encodeURIComponent(originalUrl)
+			fullRedirUrl := fmt.Sprintf("%s?callback?callbackURL=%s", redirUrl, encodedUrl)
+			ctx.Redirect(http.StatusFound, fullRedirUrl)
+		} else {
+			wrapped(ctx)
+		}
+	}
+}
 
 type Authenticator struct {
 	Provider      string
@@ -78,7 +126,8 @@ func (auth *Authenticator) StartAuthFlow(ctx *gin.Context) {
 	} else {
 		// Save the auth flow so we can associate all requests together
 		session := sessions.Default(ctx)
-		session.Set("authFlowId", nil)
+		session.Set("authFlowId", authFlow.Id)
+		session.Save()
 
 		// Kick off an auth we can have different kinds of auth
 		if auth.OnAuthFlowStarted != nil {
@@ -119,19 +168,24 @@ func (auth *Authenticator) AuthFlowVerified(ctx *gin.Context, tokens map[string]
 	// const authFlow = await datastore.getAuthFlowById(authFlowId);
 	// TODO - Use the authFlow.purpose to ensure loginUser is not lost
 	// ensure channel is created
-	identity := auth.IdentityStore.EnsureIdentity(idFromProfile.IdentityType, idFromProfile.IdentityKey, nil)
-	channel := auth.ChannelStore.EnsureChannel(auth.Provider, idFromProfile.ChannelId, map[string]interface{}{
+	identity, _ := auth.IdentityStore.EnsureIdentity(idFromProfile.IdentityType, idFromProfile.IdentityKey, nil)
+	channelParams := map[string]interface{}{
 		"credentials": tokens,
-		"expiresIn":   params["expires_in"] || 0,
 		"profile":     profile,
-		"identityKey": identity.key,
-	})
-	if !channel.hasIdentity {
-		channel.identityKey = identity.key
+		"identityKey": identity.Key(),
+	}
+	if _, ok := params["expires_in"]; ok {
+		if val, ok := params["expires_in"].(int32); ok {
+			channelParams["expires_in"] = val
+		}
+	}
+	channel, _ := auth.ChannelStore.EnsureChannel(auth.Provider, idFromProfile.ChannelId, channelParams)
+	if !channel.HasIdentity() {
+		channel.IdentityKey = identity.Key()
 		auth.ChannelStore.SaveChannel(channel)
 	}
 
-	if this.ensuredIdentity {
+	if auth.OnIdentityEnsured != nil {
 		auth.OnIdentityEnsured(channel, identity)
 	}
 
@@ -150,9 +204,11 @@ func (auth *Authenticator) AuthFlowCompleted(ctx *gin.Context) {
 	authFlow := auth.AuthFlowStore.GetAuthFlowById(authFlowId)
 
 	// We are done with the AuthFlow so clean it up
-	req.session.authFlowId = nil
+	session := sessions.Default(ctx)
+	session.Set("authFlowId", nil)
+	session.Save()
 
-	if authFlow && this.continueAuthFlow != nil {
+	if authFlow != nil && auth.ContinueAuthFlow != nil {
 		auth.ContinueAuthFlow(authFlow, ctx)
 	} else {
 		ctx.Redirect(http.StatusFound, "/")
@@ -169,15 +225,15 @@ func (auth *Authenticator) EnsureAuthFlow(authFlowId string, callbackURL string)
 		// create a new session if it was not provided
 		authFlow = auth.AuthFlowStore.SaveAuthFlow(
 			&AuthFlow{
-				provider:      this.provider,
-				handlerName:   "login",
-				handlerParams: {callbackURL: callbackURL},
+				Provider:      auth.Provider,
+				HandlerName:   "login",
+				HandlerParams: map[string]interface{}{callbackURL: callbackURL},
 			},
 		)
 	} else {
-		authFlow = auth.AuthFlowStore.getAuthFlowById(authFlowId)
+		authFlow = auth.AuthFlowStore.GetAuthFlowById(authFlowId)
 	}
-	if authFlow == nil || authFlow.provider != this.provider {
+	if authFlow == nil || authFlow.Provider != auth.Provider {
 		return nil
 	}
 	// session.authFlowId = authFlow.id;
