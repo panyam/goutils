@@ -101,7 +101,7 @@ type AuthFlow struct {
 	HandlerName string // "login"
 
 	// Parameters for the handler to continue with.
-	HandlerParams utils.StringMap
+	HandlerParams dal.JsonField `gorm:"type:text"`
 }
 
 // And others things here
@@ -123,12 +123,12 @@ type Channel struct {
 	/**
 	 * Credentials for this channel (like access tokens, hashed passwords etc).
 	 */
-	Credentials dal.JsonField
+	Credentials dal.JsonField `gorm:"type:text"`
 
 	/**
 	 * Profile as passed by the provider of the channel.
 	 */
-	Profile dal.JsonField
+	Profile dal.JsonField `gorm:"type:text"`
 
 	/**
 	 * When does this channel expire and needs another login/auth.

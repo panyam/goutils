@@ -26,7 +26,7 @@ func EncodeURIComponent(str string) string {
  * @param res Response object
  * @param next next function
  */
-func (auth *Authenticator) EnsureLogin(config *EnsureLoginConfig) RequestHandler {
+func EnsureLogin(config *EnsureLoginConfig) RequestHandler {
 	if config != nil {
 		config = &EnsureLoginConfig{
 			GetRedirURL:   func(ctx *gin.Context) string { return "/auth/login" },
