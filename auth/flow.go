@@ -1,24 +1,22 @@
 package auth
 
 import (
+	"encoding/base64"
 	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/panyam/goutils/utils"
 	"log"
+	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 )
 
-type IdentityInterface struct {
-	ChannelId    string
-	IdentityType string
-	IdentityKey  string
-}
-
 type RequestHandler = func(ctx *gin.Context)
-type AuthFlowCallback = func(authFlow *AuthFlow, ctx *gin.Context)
+type AuthFlowStarted = func(authFlow *AuthFlow, ctx *gin.Context)
 type AuthFlowCredentialsReceived = func(ctx *gin.Context)
-type IdentityFromProfileFunc = func(profile map[string]interface{}) IdentityInterface
+type IdentityFromProfileFunc = func(profile utils.StringMap) (ChannelId string, IdentityType string, IdentityKey string)
 type AuthFlowSucceededFunc = func(authFlow *AuthFlow, ctx *gin.Context)
 type AuthFlowFailedFunc = func(authFlow *AuthFlow, ctx *gin.Context)
 type AuthFlowIdentityEnsured = func(channel *Channel, identity *Identity)
@@ -69,7 +67,7 @@ type Authenticator struct {
 	 * Step 1. This kicks off the actual auth where credentials can be
 	 * extracted from the user.
 	 */
-	OnAuthFlowStarted AuthFlowCallback
+	OnAuthFlowStarted AuthFlowStarted
 
 	/**
 	 * Step 2.  Once the auth flow is started (eg via a redirect to the provider),
@@ -102,6 +100,17 @@ type Authenticator struct {
 	 */
 	OnAuthFlowSucceeded AuthFlowSucceededFunc
 	OnAuthFlowFailed    AuthFlowFailedFunc
+}
+
+func generateStateOauthCookie(provider string, ctx *gin.Context) string {
+	cookieName := fmt.Sprintf("oauthstate_%s", provider)
+	var expiration = time.Now().Add(365 * 24 * time.Hour)
+	b := make([]byte, 16)
+	rand.Read(b)
+	state := base64.URLEncoding.EncodeToString(b)
+	cookie := http.Cookie{Name: cookieName, Value: state, Expires: expiration}
+	http.SetCookie(ctx.Writer, &cookie)
+	return state
 }
 
 /**
@@ -155,14 +164,14 @@ func (auth *Authenticator) HandleAuthFlowCredentials(ctx *gin.Context) {
  * This method is called after authFlowCredentialsReceived by the entity
  * verifying the auth flow credentials.
  */
-func (auth *Authenticator) AuthFlowVerified(ctx *gin.Context, tokens map[string]interface{}, params map[string]interface{}, profile map[string]interface{}) (*Channel, *Identity) {
+func (auth *Authenticator) AuthFlowVerified(ctx *gin.Context, tokens utils.StringMap, params utils.StringMap, profile utils.StringMap) (*Channel, *Identity) {
 	// the ID here is specific to what is returned by the channel provider
-	idFromProfile := auth.IdentityFromProfile(profile)
+	channelId, idType, idKey := auth.IdentityFromProfile(profile)
 	// const authFlow = await datastore.getAuthFlowById(authFlowId);
 	// TODO - Use the authFlow.purpose to ensure loginUser is not lost
 	// ensure channel is created
-	identity, _ := auth.IdentityStore.EnsureIdentity(idFromProfile.IdentityType, idFromProfile.IdentityKey, nil)
-	channelParams := map[string]interface{}{
+	identity, _ := auth.IdentityStore.EnsureIdentity(idType, idKey, nil)
+	channelParams := utils.StringMap{
 		"credentials": tokens,
 		"profile":     profile,
 		"identityKey": identity.Key(),
@@ -172,7 +181,7 @@ func (auth *Authenticator) AuthFlowVerified(ctx *gin.Context, tokens map[string]
 			channelParams["expires_in"] = val
 		}
 	}
-	channel, _ := auth.ChannelStore.EnsureChannel(auth.Provider, idFromProfile.ChannelId, channelParams)
+	channel, _ := auth.ChannelStore.EnsureChannel(auth.Provider, channelId, channelParams)
 	if !channel.HasIdentity() {
 		channel.IdentityKey = identity.Key()
 		auth.ChannelStore.SaveChannel(channel)
@@ -246,7 +255,7 @@ func (auth *Authenticator) EnsureAuthFlow(authFlowId string, callbackURL string)
 			&AuthFlow{
 				Provider:      auth.Provider,
 				HandlerName:   "login",
-				HandlerParams: map[string]interface{}{callbackURL: callbackURL},
+				HandlerParams: utils.StringMap{callbackURL: callbackURL},
 			},
 		)
 	} else {

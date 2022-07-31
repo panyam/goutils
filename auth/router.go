@@ -9,51 +9,12 @@ import (
 	"strings"
 )
 
-/**
- * Registers endpoints required for OAuth under a given router.
- */
-func RegisterOAuthRouter(
-	rg *gin.RouterGroup,
-	authn *Authenticator,
-	startPrefix string, ///  = "/",
-	successCallbackPrefix string, ////  = "/callback",
-	failureCallbackPrefix string, ///  = "/fail",
-) {
-	/*
-	 * Registers a starting endpoint for the auth.
-	 *
-	 * This is usually a get request that kicks off the auth.  This can also
-	 * be overridden to handle other reuqests (eg post requests).
-	 */
-	rg.GET(startPrefix, func(ctx *gin.Context) {
-		authn.StartAuthFlow(ctx)
-	})
-
-	/**
-	 * Registers an endpoint for handling any processing of credentials either by the
-	 * user (eg username/password) or by auth providers (via success callbacks).
-	 */
-	rg.GET(successCallbackPrefix, authn.HandleAuthFlowCredentials, authn.AuthFlowSucceeded)
-
-	/**
-	 * Registers the failure endpoint handler.
-	 */
-	rg.GET(failureCallbackPrefix, authn.AuthFlowFailed)
-}
-
 type EnsureLoginConfig struct {
 	GetRedirURL   func(ctx *gin.Context) string
 	UserParamName string
 }
 
-func DefaultEnsureLoginConfig() *EnsureLoginConfig {
-	return &EnsureLoginConfig{
-		GetRedirURL:   func(ctx *gin.Context) string { return "/auth/login" },
-		UserParamName: "loggedInUser",
-	}
-}
-
-func encodeURIComponent(str string) string {
+func EncodeURIComponent(str string) string {
 	r := url.QueryEscape(str)
 	r = strings.Replace(r, "+", "%20", -1)
 	return r
@@ -67,7 +28,10 @@ func encodeURIComponent(str string) string {
  */
 func (auth *Authenticator) EnsureLogin(config *EnsureLoginConfig) RequestHandler {
 	if config != nil {
-		config = DefaultEnsureLoginConfig()
+		config = &EnsureLoginConfig{
+			GetRedirURL:   func(ctx *gin.Context) string { return "/auth/login" },
+			UserParamName: "loggedInUser",
+		}
 	}
 	return func(ctx *gin.Context) {
 		session := sessions.Default(ctx)
@@ -77,7 +41,7 @@ func (auth *Authenticator) EnsureLogin(config *EnsureLoginConfig) RequestHandler
 			// `/${config.redirectURLPrefix || "auth"}/login?callbackURL=${encodeURIComponent(req.originalUrl)}`;
 			redirUrl := config.GetRedirURL(ctx)
 			originalUrl := ctx.Request.URL.Path
-			encodedUrl := encodeURIComponent(originalUrl)
+			encodedUrl := EncodeURIComponent(originalUrl)
 			fullRedirUrl := fmt.Sprintf("%s?callback?callbackURL=%s", redirUrl, encodedUrl)
 			ctx.Redirect(http.StatusFound, fullRedirUrl)
 		}
