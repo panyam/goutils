@@ -27,7 +27,7 @@ func EncodeURIComponent(str string) string {
  * @param next next function
  */
 func EnsureLogin(config *EnsureLoginConfig) RequestHandler {
-	if config != nil {
+	if config == nil {
 		config = &EnsureLoginConfig{
 			GetRedirURL:   func(ctx *gin.Context) string { return "/auth/login" },
 			UserParamName: "loggedInUser",
