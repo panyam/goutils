@@ -28,10 +28,13 @@ func EncodeURIComponent(str string) string {
  */
 func EnsureLogin(config *EnsureLoginConfig) RequestHandler {
 	if config == nil {
-		config = &EnsureLoginConfig{
-			GetRedirURL:   func(ctx *gin.Context) string { return "/auth/login" },
-			UserParamName: "loggedInUser",
-		}
+		config = &EnsureLoginConfig{}
+	}
+	if config.GetRedirURL == nil {
+		config.GetRedirURL = func(ctx *gin.Context) string { return "/auth/login" }
+	}
+	if config.UserParamName == "" {
+		config.UserParamName = "loggedInUser"
 	}
 	return func(ctx *gin.Context) {
 		session := sessions.Default(ctx)
@@ -42,7 +45,7 @@ func EnsureLogin(config *EnsureLoginConfig) RequestHandler {
 			redirUrl := config.GetRedirURL(ctx)
 			originalUrl := ctx.Request.URL.Path
 			encodedUrl := EncodeURIComponent(originalUrl)
-			fullRedirUrl := fmt.Sprintf("%s?callback?callbackURL=%s", redirUrl, encodedUrl)
+			fullRedirUrl := fmt.Sprintf("%s?callbackURL=%s", redirUrl, encodedUrl)
 			ctx.Redirect(http.StatusFound, fullRedirUrl)
 		}
 	}
