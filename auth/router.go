@@ -6,8 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/panyam/goutils/utils"
 	"net/http"
-	"net/url"
-	"strings"
 )
 
 type EnsureLoginConfig struct {
