@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/panyam/goutils/utils"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,12 +13,6 @@ import (
 type EnsureLoginConfig struct {
 	GetRedirURL   func(ctx *gin.Context) string
 	UserParamName string
-}
-
-func EncodeURIComponent(str string) string {
-	r := url.QueryEscape(str)
-	r = strings.Replace(r, "+", "%20", -1)
-	return r
 }
 
 /**
@@ -44,7 +39,7 @@ func EnsureLogin(config *EnsureLoginConfig) RequestHandler {
 			// `/${config.redirectURLPrefix || "auth"}/login?callbackURL=${encodeURIComponent(req.originalUrl)}`;
 			redirUrl := config.GetRedirURL(ctx)
 			originalUrl := ctx.Request.URL.Path
-			encodedUrl := EncodeURIComponent(originalUrl)
+			encodedUrl := utils.EncodeURIComponent(originalUrl)
 			fullRedirUrl := fmt.Sprintf("%s?callbackURL=%s", redirUrl, encodedUrl)
 			ctx.Redirect(http.StatusFound, fullRedirUrl)
 		}
