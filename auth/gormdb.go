@@ -32,7 +32,7 @@ func (adb *AuthDB) SaveChannel(entity *Channel) (err error) {
 
 func (adb *AuthDB) GetChannel(provider string, loginId string) (*Channel, error) {
 	var out Channel
-	err := adb.storage.First(&out, "provider = ? AND login_id", provider, loginId).Error
+	err := adb.storage.First(&out, "provider = ? AND login_id = ?", provider, loginId).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
