@@ -36,10 +36,16 @@ func EnsureLogin(config *EnsureLoginConfig) RequestHandler {
 			// Redirect to a login if user not logged in
 			// `/${config.redirectURLPrefix || "auth"}/login?callbackURL=${encodeURIComponent(req.originalUrl)}`;
 			redirUrl := config.GetRedirURL(ctx)
-			originalUrl := ctx.Request.URL.Path
-			encodedUrl := utils.EncodeURIComponent(originalUrl)
-			fullRedirUrl := fmt.Sprintf("%s?callbackURL=%s", redirUrl, encodedUrl)
-			ctx.Redirect(http.StatusFound, fullRedirUrl)
+			if redirUrl != "" {
+				originalUrl := ctx.Request.URL.Path
+				encodedUrl := utils.EncodeURIComponent(originalUrl)
+				fullRedirUrl := fmt.Sprintf("%s?callbackURL=%s", redirUrl, encodedUrl)
+				ctx.Redirect(http.StatusFound, fullRedirUrl)
+			} else {
+				// otherwise a 401
+				ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Not LoggedIn"})
+			}
+			ctx.Abort()
 		}
 	}
 }
