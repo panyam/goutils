@@ -5,6 +5,7 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/panyam/goutils/utils"
+	"log"
 	"net/http"
 )
 
@@ -33,6 +34,7 @@ func EnsureLogin(config *EnsureLoginConfig) RequestHandler {
 		session := sessions.Default(ctx)
 		userParam := session.Get(config.UserParamName)
 		if userParam == "" || userParam == nil {
+			log.Println("No user Found: ", config.UserParamName, session)
 			// Redirect to a login if user not logged in
 			// `/${config.redirectURLPrefix || "auth"}/login?callbackURL=${encodeURIComponent(req.originalUrl)}`;
 			redirUrl := config.GetRedirURL(ctx)
