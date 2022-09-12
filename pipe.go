@@ -7,6 +7,14 @@ type Pipe[T any, U any] struct {
 	mapper      func(T) U
 }
 
+func NewIDPipe[T any](input <-chan T, output chan<- T, mapper func(T) T) *Pipe[T, T] {
+	if mapper == nil {
+		mapper = IDFunc[T]
+	}
+	out := NewPipe[T, T](input, output, mapper)
+	return out
+}
+
 func NewPipe[T any, U any](input <-chan T, output chan<- U, mapper func(T) U) *Pipe[T, U] {
 	out := &Pipe[T, U]{
 		stoppedChan: make(chan bool),
