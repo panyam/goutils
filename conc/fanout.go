@@ -1,30 +1,36 @@
 package conc
 
 import (
-	"log"
-	"time"
+	"sync"
 )
 
 type FanOut[T any, U any] struct {
-	FlushPeriod   time.Duration
-	Joiner        func(inputs []T) (outputs U)
-	pendingEvents []T
-	inputChan     chan T
-	outputChans   []chan U
-	cmdChan       chan FanCmd[U]
+	Mapper      func(inputs T) U
+	selfOwnIn   bool
+	inputChan   chan T
+	outputChans []chan U
+	cmdChan     chan FanCmd[U]
+	wg          sync.WaitGroup
+	isRunning   bool
 }
 
 func NewFanOut[T any, U any](inputChan chan T) *FanOut[T, U] {
+	selfOwnIn := false
 	if inputChan == nil {
+		selfOwnIn = true
 		inputChan = make(chan T)
 	}
 	out := &FanOut[T, U]{
-		FlushPeriod: 100 * time.Millisecond,
-		cmdChan:     make(chan FanCmd[U]),
-		inputChan:   inputChan,
+		cmdChan:   make(chan FanCmd[U], 1),
+		inputChan: inputChan,
+		selfOwnIn: selfOwnIn,
 	}
 	out.start()
 	return out
+}
+
+func (fo *FanOut[T, U]) IsRunning() bool {
+	return fo.isRunning
 }
 
 func (fo *FanOut[T, U]) InputChannel() chan<- T {
@@ -36,7 +42,7 @@ func (fo *FanOut[T, U]) Send(value T) {
 }
 
 func (fo *FanOut[T, U]) New() chan U {
-	output := make(chan U)
+	output := make(chan U, 1)
 	fo.cmdChan <- FanCmd[U]{Name: "add", Channel: output}
 	return output
 }
@@ -47,31 +53,30 @@ func (fo *FanOut[T, U]) Remove(output chan U) {
 
 func (fo *FanOut[T, U]) Stop() {
 	fo.cmdChan <- FanCmd[U]{Name: "stop"}
+	fo.wg.Wait()
 }
 
 func (fo *FanOut[T, U]) start() {
-	if fo.inputChan != nil {
-		panic("Input channel is not nil - this needs to be closed first")
-	}
-	fo.inputChan = make(chan T)
-	defer func() {
-		close(fo.inputChan)
-		fo.inputChan = nil
-	}()
-
-	ticker := time.NewTicker(fo.FlushPeriod)
-	defer ticker.Stop()
-
+	fo.wg.Add(1)
+	fo.isRunning = true
 	go func() {
 		// keep reading from input and send to outputs
+		defer func() {
+			if fo.selfOwnIn {
+				close(fo.inputChan)
+				fo.inputChan = nil
+			}
+			fo.isRunning = false
+			fo.wg.Done()
+		}()
 		for {
 			select {
 			case event := <-fo.inputChan:
-				fo.pendingEvents = append(fo.pendingEvents, event)
-				break
-			case <-ticker.C:
-				// Flush
-				fo.flush()
+				for _, outputChan := range fo.outputChans {
+					if fo.Mapper != nil {
+						outputChan <- fo.Mapper(event)
+					}
+				}
 				break
 			case cmd := <-fo.cmdChan:
 				if cmd.Name == "stop" {
@@ -94,18 +99,4 @@ func (fo *FanOut[T, U]) start() {
 			}
 		}
 	}()
-}
-
-func (fo *FanOut[T, U]) flush() {
-	if len(fo.pendingEvents) == 0 {
-		return
-	}
-	pendingEvents := fo.pendingEvents
-	fo.pendingEvents = nil
-
-	// Now blast it out - in another goroutine?
-	log.Printf("Flushing %d messages to %d consumers", len(pendingEvents), len(fo.outputChans))
-	for _, outputChan := range fo.outputChans {
-		outputChan <- fo.Joiner(pendingEvents)
-	}
 }

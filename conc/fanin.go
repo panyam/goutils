@@ -10,17 +10,25 @@ type FanCmd[T any] struct {
 }
 
 type FanIn[T any] struct {
-	inChans []chan T
-	outChan chan T
-	cmdChan chan FanCmd[T]
-	pipes   []*Pipe[T, T]
-	wg      sync.WaitGroup
+	inChans    []chan T
+	selfOwnOut bool
+	outChan    chan T
+	cmdChan    chan FanCmd[T]
+	pipes      []*Pipe[T, T]
+	wg         sync.WaitGroup
+	isRunning  bool
 }
 
-func NewFanIn[T any]() *FanIn[T] {
+func NewFanIn[T any](outChan chan T) *FanIn[T] {
+	selfOwnOut := false
+	if outChan == nil {
+		outChan = make(chan T)
+		selfOwnOut = true
+	}
 	out := &FanIn[T]{
-		cmdChan: make(chan FanCmd[T]),
-		outChan: make(chan T),
+		cmdChan:    make(chan FanCmd[T]),
+		outChan:    outChan,
+		selfOwnOut: selfOwnOut,
 	}
 	out.start()
 	return out
@@ -28,6 +36,10 @@ func NewFanIn[T any]() *FanIn[T] {
 
 func (fi *FanIn[T]) Channel() chan T {
 	return fi.outChan
+}
+
+func (fi *FanIn[T]) IsRunning() bool {
+	return fi.isRunning
 }
 
 func (fi *FanIn[T]) Add(inputs ...chan T) {
@@ -42,19 +54,33 @@ func (fi *FanIn[T]) Remove(target chan T) {
 
 func (fi *FanIn[T]) Stop() {
 	fi.cmdChan <- FanCmd[T]{Name: "stop"}
+	fi.wg.Wait()
 }
 
-func (fi *FanIn[T]) start() *FanIn[T] {
+func (fi *FanIn[T]) start() {
 	fi.wg.Add(1)
+	fi.isRunning = true
 	go func() {
-		defer fi.wg.Done()
+		defer func() {
+			close(fi.cmdChan)
+			fi.pipes = nil
+			fi.inChans = nil
+			fi.cmdChan = nil
+			if fi.selfOwnOut {
+				close(fi.outChan)
+				fi.outChan = nil
+			}
+			fi.isRunning = false
+			fi.wg.Done()
+		}()
+
 		for {
 			cmd := <-fi.cmdChan
 			if cmd.Name == "stop" {
 				for _, pipe := range fi.pipes {
 					pipe.Stop()
+					fi.wg.Done()
 				}
-				fi.wg.Done()
 				return
 			} else if cmd.Name == "add" {
 				// Add a new reader to our list
@@ -70,20 +96,11 @@ func (fi *FanIn[T]) start() *FanIn[T] {
 						fi.pipes = fi.pipes[:len(fi.pipes)-1]
 						fi.inChans[index] = fi.inChans[len(fi.inChans)-1]
 						fi.inChans = fi.inChans[:len(fi.inChans)-1]
+						fi.wg.Done()
 						break
 					}
 				}
 			}
 		}
 	}()
-
-	// And a goroutine to wait for all these to be done
-	go func() {
-		fi.wg.Wait()
-		close(fi.cmdChan)
-		close(fi.outChan)
-		fi.cmdChan = nil
-		fi.outChan = nil
-	}()
-	return fi
 }
