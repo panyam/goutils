@@ -1,33 +1,42 @@
 package conc
 
-func Pipe[T any](input chan T, output chan T, onDone func()) (cmdChan chan string) {
-	cmdChan = make(chan string)
-	go func() {
-		defer close(cmdChan)
-		if onDone != nil {
-			defer onDone()
-		}
-		state := "running"
-		for {
-			cmd := ""
-			if state == "running" {
-				select {
-				case cmd = <-cmdChan:
-					break
-				case value := <-input:
-					output <- value
-					break
-				}
-			} else {
-				cmd = <-cmdChan
-			}
+type Pipe[T any, U any] struct {
+	input       <-chan T
+	output      chan<- U
+	stoppedChan chan bool
+	mapper      func(T) U
+}
 
-			if cmd == "stop" {
+func NewPipe[T any, U any](input <-chan T, output chan<- U, mapper func(T) U) *Pipe[T, U] {
+	out := &Pipe[T, U]{
+		stoppedChan: make(chan bool),
+		input:       input,
+		output:      output,
+		mapper:      mapper,
+	}
+	out.start()
+	return out
+}
+
+func (p *Pipe[T, U]) Stop() {
+	p.stoppedChan <- true
+}
+
+func (p *Pipe[T, U]) start() {
+	go func() {
+		defer func() {
+			close(p.stoppedChan)
+			p.stoppedChan = nil
+		}()
+		for {
+			select {
+			case <-p.stoppedChan:
+				// stopped - only "stop" allowed here
 				return
-			} else if cmd == "pause" {
-				state = "paused"
+			case value := <-p.input:
+				p.output <- p.mapper(value)
+				break
 			}
 		}
 	}()
-	return cmdChan
 }

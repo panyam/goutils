@@ -9,65 +9,81 @@ type FanCmd[T any] struct {
 	Channel chan T
 }
 
-func FanIn[T any](readers ...chan T) (chan T, chan FanCmd[T]) {
-	var wg sync.WaitGroup
-	resultChannel := make(chan T)
-	controlChannel := make(chan FanCmd[T])
+type FanIn[T any] struct {
+	inChans []chan T
+	outChan chan T
+	cmdChan chan FanCmd[T]
+	pipes   []*Pipe[T, T]
+	wg      sync.WaitGroup
+}
 
-	var cmdChans []chan string
-	addChannel := func(reader chan T) {
-		wg.Add(1)
-		cmdChan := Pipe(reader, resultChannel, func() {
-			wg.Done()
-		})
-		cmdChans = append(cmdChans, cmdChan)
+func NewFanIn[T any]() *FanIn[T] {
+	out := &FanIn[T]{
+		cmdChan: make(chan FanCmd[T]),
+		outChan: make(chan T),
 	}
+	out.start()
+	return out
+}
 
-	removeChannel := func(reader chan T) {
-		for index, ch := range readers {
-			if ch == reader {
-				cmdChans[index] <- "stop"
-				cmdChans[index] = cmdChans[len(cmdChans)-1]
-				cmdChans = cmdChans[:len(cmdChans)-1]
-				readers[index] = readers[len(readers)-1]
-				readers = readers[:len(readers)-1]
-				return
-			}
-		}
+func (fi *FanIn[T]) Channel() chan T {
+	return fi.outChan
+}
+
+func (fi *FanIn[T]) Add(inputs ...chan T) {
+	for _, input := range inputs {
+		fi.cmdChan <- FanCmd[T]{Name: "add", Channel: input}
 	}
+}
 
-	for _, reader := range readers {
-		addChannel(reader)
-	}
+func (fi *FanIn[T]) Remove(target chan T) {
+	fi.cmdChan <- FanCmd[T]{Name: "remove", Channel: target}
+}
 
-	wg.Add(1)
+func (fi *FanIn[T]) Stop() {
+	fi.cmdChan <- FanCmd[T]{Name: "stop"}
+}
+
+func (fi *FanIn[T]) start() *FanIn[T] {
+	fi.wg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer fi.wg.Done()
 		for {
-			cmd := <-controlChannel
-			if cmd.Name == "stop" || cmd.Name == "pause" {
-				for _, cmdChan := range cmdChans {
-					cmdChan <- cmd.Name
+			cmd := <-fi.cmdChan
+			if cmd.Name == "stop" {
+				for _, pipe := range fi.pipes {
+					pipe.Stop()
 				}
-				if cmd.Name == "stop" {
-					wg.Done()
-					return
-				}
+				fi.wg.Done()
+				return
 			} else if cmd.Name == "add" {
 				// Add a new reader to our list
-				addChannel(cmd.Channel)
-			} else if cmd.Name == "delete" {
+				fi.wg.Add(1)
+				pipe := NewPipe(cmd.Channel, fi.outChan, func(x T) T { return x })
+				fi.pipes = append(fi.pipes, pipe)
+			} else if cmd.Name == "remove" {
 				// Remove an existing reader from our list
-				removeChannel(cmd.Channel)
+				for index, ch := range fi.inChans {
+					if ch == cmd.Channel {
+						fi.pipes[index].Stop()
+						fi.pipes[index] = fi.pipes[len(fi.pipes)-1]
+						fi.pipes = fi.pipes[:len(fi.pipes)-1]
+						fi.inChans[index] = fi.inChans[len(fi.inChans)-1]
+						fi.inChans = fi.inChans[:len(fi.inChans)-1]
+						break
+					}
+				}
 			}
 		}
 	}()
 
 	// And a goroutine to wait for all these to be done
 	go func() {
-		wg.Wait()
-		close(controlChannel)
-		close(resultChannel)
+		fi.wg.Wait()
+		close(fi.cmdChan)
+		close(fi.outChan)
+		fi.cmdChan = nil
+		fi.outChan = nil
 	}()
-	return resultChannel, controlChannel
+	return fi
 }
