@@ -9,7 +9,7 @@ import (
 )
 
 func TestFanOut(t *testing.T) {
-	fanout := NewFanOut[int, int](nil)
+	fanout := NewIDFanOut[int](nil, nil)
 	fanout.Mapper = IDFunc[int]
 	var vals []int
 	var wg sync.WaitGroup

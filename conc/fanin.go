@@ -5,8 +5,9 @@ import (
 )
 
 type FanInCmd[T any] struct {
-	Name    string
-	Channel chan T
+	Name           string
+	AddedChannel   <-chan T
+	RemovedChannel <-chan T
 }
 
 type FanIn[T any] struct {
@@ -42,14 +43,14 @@ func (fi *FanIn[T]) IsRunning() bool {
 	return fi.isRunning
 }
 
-func (fi *FanIn[T]) Add(inputs ...chan T) {
+func (fi *FanIn[T]) Add(inputs ...<-chan T) {
 	for _, input := range inputs {
-		fi.cmdChan <- FanInCmd[T]{Name: "add", Channel: input}
+		fi.cmdChan <- FanInCmd[T]{Name: "add", AddedChannel: input}
 	}
 }
 
-func (fi *FanIn[T]) Remove(target chan T) {
-	fi.cmdChan <- FanInCmd[T]{Name: "remove", Channel: target}
+func (fi *FanIn[T]) Remove(target <-chan T) {
+	fi.cmdChan <- FanInCmd[T]{Name: "remove", RemovedChannel: target}
 }
 
 func (fi *FanIn[T]) Stop() {
@@ -85,12 +86,12 @@ func (fi *FanIn[T]) start() {
 			} else if cmd.Name == "add" {
 				// Add a new reader to our list
 				fi.wg.Add(1)
-				pipe := NewPipe(cmd.Channel, fi.outChan, func(x T) T { return x })
+				pipe := NewPipe(cmd.AddedChannel, fi.outChan, func(x T) T { return x })
 				fi.pipes = append(fi.pipes, pipe)
 			} else if cmd.Name == "remove" {
 				// Remove an existing reader from our list
 				for index, ch := range fi.inChans {
-					if ch == cmd.Channel {
+					if ch == cmd.RemovedChannel {
 						fi.pipes[index].Stop()
 						fi.pipes[index] = fi.pipes[len(fi.pipes)-1]
 						fi.pipes = fi.pipes[:len(fi.pipes)-1]

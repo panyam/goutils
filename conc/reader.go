@@ -39,7 +39,7 @@ func (ch *ReaderChan[R, D]) IsRunning() bool {
 /**
  * Returns the conn's reader channel.
  */
-func (rc *ReaderChan[R, D]) ResultChannel() <-chan ValueOrError[R] {
+func (rc *ReaderChan[R, D]) ResultChannel() chan ValueOrError[R] {
 	return rc.msgChannel
 }
 
@@ -67,7 +67,6 @@ func (rc *ReaderChan[R, D]) start() (err error) {
 	}
 	rc.msgChannel = make(chan ValueOrError[R])
 	rc.ReaderWriterBase.start()
-	log.Println("Starting reader: ")
 	go func() {
 		defer rc.ReaderWriterBase.cleanup()
 		for {

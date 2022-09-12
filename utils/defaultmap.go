@@ -8,6 +8,7 @@ type DefaultMap[V interface{}] struct {
 func NewDefaultMap[V any](creator func(key string) V) *DefaultMap[V] {
 	return &DefaultMap[V]{
 		entries: make(map[string]V),
+		creator: creator,
 	}
 }
 
