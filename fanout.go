@@ -24,10 +24,10 @@ func NewIDFanOut[T any](input chan T, mapper func(T) T) *FanOut[T, T] {
 	if mapper == nil {
 		mapper = IDFunc[T]
 	}
-	return NewFanOut[T, T](input)
+	return NewFanOut[T, T](input, mapper)
 }
 
-func NewFanOut[T any, U any](inputChan chan T) *FanOut[T, U] {
+func NewFanOut[T any, U any](inputChan chan T, mapper func(T) U) *FanOut[T, U] {
 	selfOwnIn := false
 	if inputChan == nil {
 		selfOwnIn = true
@@ -37,6 +37,7 @@ func NewFanOut[T any, U any](inputChan chan T) *FanOut[T, U] {
 		cmdChan:   make(chan FanOutCmd[U], 1),
 		inputChan: inputChan,
 		selfOwnIn: selfOwnIn,
+		Mapper:    mapper,
 	}
 	out.start()
 	return out
@@ -86,9 +87,7 @@ func (fo *FanOut[T, U]) start() {
 			select {
 			case event := <-fo.inputChan:
 				for _, outputChan := range fo.outputChans {
-					if fo.Mapper != nil {
-						outputChan <- fo.Mapper(event)
-					}
+					outputChan <- fo.Mapper(event)
 				}
 				break
 			case cmd := <-fo.cmdChan:
