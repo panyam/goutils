@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+type BatcherCmd[T any] struct {
+	Name    string
+	Channel chan T
+}
+
 type Batcher[T any, U any] struct {
 	FlushPeriod   time.Duration
 	Joiner        func(inputs []T) (outputs U)
@@ -13,7 +18,7 @@ type Batcher[T any, U any] struct {
 	selfOwnIn     bool
 	inputChan     chan T
 	outputChan    chan U
-	cmdChan       chan FanCmd[U]
+	cmdChan       chan BatcherCmd[U]
 	wg            sync.WaitGroup
 }
 
@@ -31,7 +36,7 @@ func NewBatcher[T any, U any](inputChan chan T) *Batcher[T, U] {
 	}
 	out := &Batcher[T, U]{
 		FlushPeriod: 100 * time.Millisecond,
-		cmdChan:     make(chan FanCmd[U]),
+		cmdChan:     make(chan BatcherCmd[U]),
 		inputChan:   inputChan,
 		selfOwnIn:   selfOwnIn,
 	}
@@ -49,16 +54,16 @@ func (fo *Batcher[T, U]) Send(value T) {
 
 func (fo *Batcher[T, U]) New() chan U {
 	output := make(chan U)
-	fo.cmdChan <- FanCmd[U]{Name: "add", Channel: output}
+	fo.cmdChan <- BatcherCmd[U]{Name: "add", Channel: output}
 	return output
 }
 
 func (fo *Batcher[T, U]) Remove(output chan U) {
-	fo.cmdChan <- FanCmd[U]{Name: "remove", Channel: output}
+	fo.cmdChan <- BatcherCmd[U]{Name: "remove", Channel: output}
 }
 
 func (fo *Batcher[T, U]) Stop() {
-	fo.cmdChan <- FanCmd[U]{Name: "stop"}
+	fo.cmdChan <- BatcherCmd[U]{Name: "stop"}
 	fo.wg.Wait()
 }
 

@@ -4,12 +4,18 @@ import (
 	"sync"
 )
 
+type FanOutCmd[T any] struct {
+	Name           string
+	AddedChannel   chan T
+	RemovedChannel <-chan T
+}
+
 type FanOut[T any, U any] struct {
 	Mapper      func(inputs T) U
 	selfOwnIn   bool
 	inputChan   chan T
 	outputChans []chan U
-	cmdChan     chan FanCmd[U]
+	cmdChan     chan FanOutCmd[U]
 	wg          sync.WaitGroup
 	isRunning   bool
 }
@@ -28,7 +34,7 @@ func NewFanOut[T any, U any](inputChan chan T) *FanOut[T, U] {
 		inputChan = make(chan T)
 	}
 	out := &FanOut[T, U]{
-		cmdChan:   make(chan FanCmd[U], 1),
+		cmdChan:   make(chan FanOutCmd[U], 1),
 		inputChan: inputChan,
 		selfOwnIn: selfOwnIn,
 	}
@@ -48,18 +54,18 @@ func (fo *FanOut[T, U]) Send(value T) {
 	fo.inputChan <- value
 }
 
-func (fo *FanOut[T, U]) New() chan U {
+func (fo *FanOut[T, U]) New() <-chan U {
 	output := make(chan U, 1)
-	fo.cmdChan <- FanCmd[U]{Name: "add", Channel: output}
+	fo.cmdChan <- FanOutCmd[U]{Name: "add", AddedChannel: output}
 	return output
 }
 
-func (fo *FanOut[T, U]) Remove(output chan U) {
-	fo.cmdChan <- FanCmd[U]{Name: "remove", Channel: output}
+func (fo *FanOut[T, U]) Remove(output <-chan U) {
+	fo.cmdChan <- FanOutCmd[U]{Name: "remove", RemovedChannel: output}
 }
 
 func (fo *FanOut[T, U]) Stop() {
-	fo.cmdChan <- FanCmd[U]{Name: "stop"}
+	fo.cmdChan <- FanOutCmd[U]{Name: "stop"}
 	fo.wg.Wait()
 }
 
@@ -90,11 +96,11 @@ func (fo *FanOut[T, U]) start() {
 					return
 				} else if cmd.Name == "add" {
 					// Add a new reader to our list
-					fo.outputChans = append(fo.outputChans, cmd.Channel)
+					fo.outputChans = append(fo.outputChans, cmd.AddedChannel)
 				} else if cmd.Name == "remove" {
 					// Remove an existing reader from our list
 					for index, ch := range fo.outputChans {
-						if ch == cmd.Channel {
+						if ch == cmd.RemovedChannel {
 							close(ch)
 							fo.outputChans[index] = fo.outputChans[len(fo.outputChans)-1]
 							fo.outputChans = fo.outputChans[:len(fo.outputChans)-1]

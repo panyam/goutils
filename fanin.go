@@ -4,7 +4,7 @@ import (
 	"sync"
 )
 
-type FanCmd[T any] struct {
+type FanInCmd[T any] struct {
 	Name    string
 	Channel chan T
 }
@@ -13,7 +13,7 @@ type FanIn[T any] struct {
 	inChans    []chan T
 	selfOwnOut bool
 	outChan    chan T
-	cmdChan    chan FanCmd[T]
+	cmdChan    chan FanInCmd[T]
 	pipes      []*Pipe[T, T]
 	wg         sync.WaitGroup
 	isRunning  bool
@@ -26,7 +26,7 @@ func NewFanIn[T any](outChan chan T) *FanIn[T] {
 		selfOwnOut = true
 	}
 	out := &FanIn[T]{
-		cmdChan:    make(chan FanCmd[T]),
+		cmdChan:    make(chan FanInCmd[T]),
 		outChan:    outChan,
 		selfOwnOut: selfOwnOut,
 	}
@@ -44,16 +44,16 @@ func (fi *FanIn[T]) IsRunning() bool {
 
 func (fi *FanIn[T]) Add(inputs ...chan T) {
 	for _, input := range inputs {
-		fi.cmdChan <- FanCmd[T]{Name: "add", Channel: input}
+		fi.cmdChan <- FanInCmd[T]{Name: "add", Channel: input}
 	}
 }
 
 func (fi *FanIn[T]) Remove(target chan T) {
-	fi.cmdChan <- FanCmd[T]{Name: "remove", Channel: target}
+	fi.cmdChan <- FanInCmd[T]{Name: "remove", Channel: target}
 }
 
 func (fi *FanIn[T]) Stop() {
-	fi.cmdChan <- FanCmd[T]{Name: "stop"}
+	fi.cmdChan <- FanInCmd[T]{Name: "stop"}
 	fi.wg.Wait()
 }
 
