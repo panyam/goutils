@@ -5,43 +5,51 @@ import (
 	"time"
 )
 
-type FanOut[T any] struct {
+type FanOut[T any, U any] struct {
 	FlushPeriod   time.Duration
+	Joiner        func(inputs []T) (outputs U)
 	pendingEvents []T
 	inputChan     chan T
-	outputChans   []chan []T
-	cmdChan       chan FanCmd[[]T]
+	outputChans   []chan U
+	cmdChan       chan FanCmd[U]
 }
 
-func NewFanOut[T any]() *FanOut[T] {
-	out := &FanOut[T]{
-		FlushPeriod: 100 * time.Millisecond,
-		cmdChan:     make(chan FanCmd[[]T]),
+func NewFanOut[T any, U any](inputChan chan T) *FanOut[T, U] {
+	if inputChan == nil {
+		inputChan = make(chan T)
 	}
+	out := &FanOut[T, U]{
+		FlushPeriod: 100 * time.Millisecond,
+		cmdChan:     make(chan FanCmd[U]),
+		inputChan:   inputChan,
+	}
+	out.start()
 	return out
 }
 
-func (fo *FanOut[T]) Send(value T) {
+func (fo *FanOut[T, U]) InputChannel() chan<- T {
+	return fo.inputChan
+}
+
+func (fo *FanOut[T, U]) Send(value T) {
 	fo.inputChan <- value
 }
 
-func (fo *FanOut[T]) NewOutput() (output chan []T) {
-	output = make(chan []T)
-	fo.AddOutputs(output)
-	return
+func (fo *FanOut[T, U]) New() chan U {
+	output := make(chan U)
+	fo.cmdChan <- FanCmd[U]{Name: "add", Channel: output}
+	return output
 }
 
-func (fo *FanOut[T]) AddOutputs(channels ...chan []T) {
-	for _, output := range channels {
-		fo.cmdChan <- FanCmd[[]T]{Name: "add", Channel: output}
-	}
+func (fo *FanOut[T, U]) Remove(output chan U) {
+	fo.cmdChan <- FanCmd[U]{Name: "remove", Channel: output}
 }
 
-func (fo *FanOut[T]) RemoveOutput(output chan []T) {
-	fo.cmdChan <- FanCmd[[]T]{Name: "remove", Channel: output}
+func (fo *FanOut[T, U]) Stop() {
+	fo.cmdChan <- FanCmd[U]{Name: "stop"}
 }
 
-func (fo *FanOut[T]) Start(output chan []T) {
+func (fo *FanOut[T, U]) start() {
 	if fo.inputChan != nil {
 		panic("Input channel is not nil - this needs to be closed first")
 	}
@@ -71,13 +79,14 @@ func (fo *FanOut[T]) Start(output chan []T) {
 				} else if cmd.Name == "add" {
 					// Add a new reader to our list
 					fo.outputChans = append(fo.outputChans, cmd.Channel)
-				} else if cmd.Name == "delete" {
+				} else if cmd.Name == "remove" {
 					// Remove an existing reader from our list
 					for index, ch := range fo.outputChans {
-						if ch == output {
+						if ch == cmd.Channel {
+							close(ch)
 							fo.outputChans[index] = fo.outputChans[len(fo.outputChans)-1]
 							fo.outputChans = fo.outputChans[:len(fo.outputChans)-1]
-							return
+							break
 						}
 					}
 				}
@@ -87,7 +96,7 @@ func (fo *FanOut[T]) Start(output chan []T) {
 	}()
 }
 
-func (fo *FanOut[T]) flush() {
+func (fo *FanOut[T, U]) flush() {
 	if len(fo.pendingEvents) == 0 {
 		return
 	}
@@ -97,6 +106,6 @@ func (fo *FanOut[T]) flush() {
 	// Now blast it out - in another goroutine?
 	log.Printf("Flushing %d messages to %d consumers", len(pendingEvents), len(fo.outputChans))
 	for _, outputChan := range fo.outputChans {
-		outputChan <- pendingEvents
+		outputChan <- fo.Joiner(pendingEvents)
 	}
 }
