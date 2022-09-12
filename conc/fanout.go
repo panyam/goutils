@@ -14,6 +14,13 @@ type FanOut[T any, U any] struct {
 	isRunning   bool
 }
 
+func NewIDFanOut[T any](input chan T, mapper func(T) T) *FanOut[T, T] {
+	if mapper == nil {
+		mapper = IDFunc[T]
+	}
+	return NewFanOut[T, T](input)
+}
+
 func NewFanOut[T any, U any](inputChan chan T) *FanOut[T, U] {
 	selfOwnIn := false
 	if inputChan == nil {

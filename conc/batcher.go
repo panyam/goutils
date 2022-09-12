@@ -17,6 +17,12 @@ type Batcher[T any, U any] struct {
 	wg            sync.WaitGroup
 }
 
+func NewIDBatcher[T any](inputChan chan T) *Batcher[T, []T] {
+	out := NewBatcher[T, []T](inputChan)
+	out.Joiner = IDFunc[[]T]
+	return out
+}
+
 func NewBatcher[T any, U any](inputChan chan T) *Batcher[T, U] {
 	selfOwnIn := false
 	if inputChan == nil {
