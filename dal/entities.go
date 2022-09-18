@@ -10,6 +10,10 @@ import (
 
 type JsonField map[string]interface{}
 
+func (j *JsonField) Map() map[string]interface{} {
+	return *j
+}
+
 func (j *JsonField) Scan(value interface{}) error {
 	// Scan scan value into Jsonb, implements sql.Scanner interface
 	if value != nil && value != "null" {
