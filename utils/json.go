@@ -66,10 +66,9 @@ func JsonDecodeStr(str string) (interface{}, error) {
 	return JsonDecodeBytes([]byte(str))
 }
 
-func JsonDecodeFile(path string) (interface{}, error) {
+func JsonReadFile(path string) (interface{}, error) {
 	contents, err := os.ReadFile(path)
 	if err != nil {
-		log.Fatal(err)
 		return nil, err
 	}
 	decoder := json.NewDecoder(strings.NewReader(string(contents)))
@@ -79,4 +78,17 @@ func JsonDecodeFile(path string) (interface{}, error) {
 		log.Fatal("Invalid error decoding json: ", err)
 	}
 	return json_data, err
+}
+
+func JsonWriteFile(data interface{}, path string, perm os.FileMode) error {
+	encdata, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(path, encdata, perm)
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+	return nil
 }
