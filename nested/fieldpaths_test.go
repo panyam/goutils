@@ -2,6 +2,7 @@ package reflect
 
 import (
 	"github.com/stretchr/testify/assert"
+	"strings"
 	"testing"
 )
 
@@ -28,6 +29,22 @@ func Test1(t *testing.T) {
 			},
 		},
 	})
+
+	val, err := GetMapField[int](a, strings.Split("a/b", "/"))
+	assert.Equal(t, err, nil)
+	assert.Equal(t, val, 3)
+
+	val, err = GetMapField[string](a, strings.Split("a/c/d/e", "/"))
+	assert.Equal(t, err, nil)
+	assert.Equal(t, val, "hello world")
+
+	val, err = GetMapField[float64](a, strings.Split("a/b/c", "/"))
+	assert.Equal(t, err.Error(), "field_path (a/b/c) at index 1 is not a map")
+	assert.Equal(t, val, nil)
+
+	val, err = GetMapField[float64](a, strings.Split("a/c/d/x", "/"))
+	assert.Equal(t, err, nil)
+	assert.Equal(t, val, nil)
 }
 
 func TestReplace(t *testing.T) {

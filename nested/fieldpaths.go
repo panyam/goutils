@@ -13,12 +13,14 @@ import (
 
 type StringMap = map[string]interface{}
 
-func GetMapField(input StringMap, field_names []string) (interface{}, error) {
+func GetMapField[T any](input StringMap, field_names []string) (interface{}, error) {
 	curr := input
 	for index, field_name := range field_names {
 		child := curr[field_name]
 		if child == nil {
 			return nil, nil
+		} else if index == len(field_names)-1 {
+			return child.(T), nil
 		}
 		if childmap, ok := curr[field_name].(StringMap); ok {
 			curr = childmap
@@ -26,7 +28,7 @@ func GetMapField(input StringMap, field_names []string) (interface{}, error) {
 			return nil, fmt.Errorf("field_path (%s) at index %d is not a map", strings.Join(field_names, "/"), index)
 		}
 	}
-	return curr, nil
+	return nil, nil
 }
 
 /**
