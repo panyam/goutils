@@ -30,7 +30,11 @@ func Test1(t *testing.T) {
 		},
 	})
 
-	val, err := GetMapField[int](a, strings.Split("a/b", "/"))
+	val, err := GetMapField[int](a, "a/b")
+	assert.Equal(t, err, nil)
+	assert.Equal(t, val, 3)
+
+	val, err = GetMapField[int](a, strings.Split("a/b", "/"))
 	assert.Equal(t, err, nil)
 	assert.Equal(t, val, 3)
 
