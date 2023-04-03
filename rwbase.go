@@ -21,7 +21,7 @@ func (rwb *ReaderWriterBase[T, D]) WaitForFinish() {
 }
 
 func (rwb *ReaderWriterBase[T, D]) start() error {
-	rwb.controlChannel = make(chan string)
+	rwb.controlChannel = make(chan string, 1)
 	rwb.wg.Add(1)
 	return nil
 }
