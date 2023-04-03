@@ -70,9 +70,7 @@ func (rc *ReaderChan[R, D]) start() (err error) {
 	go func() {
 		defer rc.ReaderWriterBase.cleanup()
 		for {
-			log.Println("Starting readinog.......")
 			newMessage, err := rc.Read()
-			log.Println("Finished readinog.......")
 			rc.msgChannel <- ValueOrError[R]{
 				Value: newMessage,
 				Error: err,
