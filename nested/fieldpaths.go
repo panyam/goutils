@@ -13,7 +13,7 @@ import (
 
 type StringMap = map[string]interface{}
 
-func GetMapField[T any](input StringMap, fieldPath interface{}) (interface{}, error) {
+func GetMapField(input StringMap, fieldPath interface{}) (interface{}, error) {
 	curr := input
 	var field_names []string
 	if _, ok := fieldPath.(string); ok {
@@ -26,7 +26,7 @@ func GetMapField[T any](input StringMap, fieldPath interface{}) (interface{}, er
 		if child == nil {
 			return nil, nil
 		} else if index == len(field_names)-1 {
-			return child.(T), nil
+			return child, nil
 		}
 		if childmap, ok := curr[field_name].(StringMap); ok {
 			curr = childmap
@@ -56,6 +56,9 @@ func SetMapFields(input StringMap, field_paths_and_values ...interface{}) error 
 	return nil
 }
 
+/**
+ * Sets a map field at a given field path ensuring that everything until the leaf is a dictionary indeed.
+ */
 func SetMapField(input StringMap, fieldPath interface{}, value interface{}) error {
 	var field_names []string
 	if _, ok := fieldPath.(string); ok {
@@ -77,6 +80,27 @@ func SetMapField(input StringMap, fieldPath interface{}, value interface{}) erro
 			} else {
 				return fmt.Errorf("field_path (%s) at index %d is not a map", strings.Join(field_names, "/"), index)
 			}
+		}
+	}
+	return nil
+}
+
+/**
+ * Copy a value in a given field path from the source into a fieldpath in the dest if
+ * a. source field path is valid and exists
+ * b. dest field path is valid (or needs to be created).
+ */
+func CopyMapFields(input StringMap, output StringMap, field_paths ...interface{}) error {
+	num_args := len(field_paths)
+	for i := 0; i < num_args; i += 2 {
+		src_field_path := field_paths[i]
+		dst_field_path := field_paths[i+1]
+		srcval, err := GetMapField(input, src_field_path)
+		if err != nil {
+			return err
+		}
+		if err = SetMapField(output, dst_field_path, srcval); err != nil {
+			return err
 		}
 	}
 	return nil

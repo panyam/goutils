@@ -30,25 +30,67 @@ func Test1(t *testing.T) {
 		},
 	})
 
-	val, err := GetMapField[int](a, "a/b")
+	val, err := GetMapField(a, "a/b")
 	assert.Equal(t, err, nil)
 	assert.Equal(t, val, 3)
 
-	val, err = GetMapField[int](a, strings.Split("a/b", "/"))
+	val, err = GetMapField(a, strings.Split("a/b", "/"))
 	assert.Equal(t, err, nil)
 	assert.Equal(t, val, 3)
 
-	val, err = GetMapField[string](a, strings.Split("a/c/d/e", "/"))
+	val, err = GetMapField(a, strings.Split("a/c/d/e", "/"))
 	assert.Equal(t, err, nil)
 	assert.Equal(t, val, "hello world")
 
-	val, err = GetMapField[float64](a, strings.Split("a/b/c", "/"))
+	val, err = GetMapField(a, strings.Split("a/b/c", "/"))
 	assert.Equal(t, err.Error(), "field_path (a/b/c) at index 1 is not a map")
 	assert.Equal(t, val, nil)
 
-	val, err = GetMapField[float64](a, strings.Split("a/c/d/x", "/"))
+	val, err = GetMapField(a, strings.Split("a/c/d/x", "/"))
 	assert.Equal(t, err, nil)
 	assert.Equal(t, val, nil)
+}
+
+func TestCopyFields(t *testing.T) {
+	a := make(map[string]interface{})
+	b := make(map[string]interface{})
+	err := SetMapFields(a,
+		"a/b", 3,
+		"a/c/d/e", "hello world",
+		"a/c/d", []string{"hello", "universe"},
+	)
+
+	assert.Equal(t, err, nil)
+	assert.Equal(t, a, map[string]interface{}{
+		"a": map[string]interface{}{
+			"b": 3,
+			"c": map[string]interface{}{
+				"d": []string{
+					"hello",
+					"universe",
+				},
+			},
+		},
+	})
+
+	// now copy to b
+	err = CopyMapFields(a, b, "a/c/d", "x/y", "a/b", "l/m/n/o")
+	assert.Equal(t, err, nil)
+	assert.Equal(t, b, map[string]interface{}{
+		"l": map[string]interface{}{
+			"m": map[string]interface{}{
+				"n": map[string]interface{}{
+					"o": 3,
+				},
+			},
+		},
+		"x": map[string]interface{}{
+			"y": []string{
+				"hello",
+				"universe",
+			},
+		},
+	})
 }
 
 func TestReplace(t *testing.T) {
