@@ -8,6 +8,7 @@ import (
 )
 
 func TestPipe(t *testing.T) {
+	log.Println("============== TestPipe ================")
 	inch := make(chan int)
 	outch := make(chan int)
 	pipe := NewPipe(inch, outch, func(x int) int { return x * 2 })

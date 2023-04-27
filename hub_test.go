@@ -44,6 +44,7 @@ func TestHub(t *testing.T) {
 	hub.Send("f", 6, nil)
 	hub.Send("g", 7, nil)
 	hub.Send("h", 8, callback)
+	<-callback
 
 	sort.Strings(results)
 	assert.Equal(t, results, []string{
@@ -60,15 +61,14 @@ func TestHub(t *testing.T) {
 		"007 - c3",
 		"008 - c3",
 	})
-	<-callback
-	log.Println("Result after 8 -> h: ", results)
+	// log.Println("Result after 8 -> h: ", results)
 
 	// Now try to remove subscriptions
 	c1.Unsubscribe("a", "c")
 	c2.Subscribe("a")
 	hub.Send("a", 9, callback)
 	<-callback
-	log.Println("Result after 9 -> a: ", results)
+	// log.Println("Result after 9 -> a: ", results)
 	assert.Equal(t, results, []string{
 		"001 - c1",
 		"002 - c1",
