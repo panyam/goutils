@@ -15,7 +15,7 @@ type Router[M any] interface {
 	AddRoute(client *HubClient[M], eventKeys ...string) error
 	RemoveRoute(client *HubClient[M], eventKeys ...string) error
 	Remove(client *HubClient[M]) error
-	RouteMessage(HubMessage[M]) error
+	RouteMessage(eventKey string, msg M) error
 }
 
 /**
@@ -33,10 +33,10 @@ func NewKVRouter[M any]() *KVRouter[M] {
 	}
 }
 
-func (r *KVRouter[M]) RouteMessage(msg HubMessage[M]) error {
+func (r *KVRouter[M]) RouteMessage(eventKey string, msg M) error {
 	r.rwlock.RLock()
 	defer r.rwlock.RUnlock()
-	for _, client := range r.keyToClients[msg.EventKey] {
+	for _, client := range r.keyToClients[eventKey] {
 		if err := client.WriteMessage(msg); err != nil {
 			// Should we fail - do so for now
 			return err

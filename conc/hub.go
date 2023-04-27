@@ -6,12 +6,12 @@ import (
 	"time"
 )
 
-type HubWriter[M any] func(HubMessage[M]) error
+type HubWriter[M any] func(M) error
 
 type HubClient[M any] struct {
 	hub          *Hub[M]
 	id           string
-	WriteMessage func(HubMessage[M]) error
+	WriteMessage HubWriter[M]
 }
 
 func (h *HubClient[M]) GetId() string {
@@ -99,7 +99,10 @@ func (s *Hub[M]) start() error {
 			break
 		case msg := <-s.newMsgChannel:
 			// Handle fanout here
-			s.router.RouteMessage(msg)
+			s.router.RouteMessage(msg.EventKey, msg.Message)
+			if msg.Callback != nil {
+				msg.Callback <- msg.Message
+			}
 			break
 		}
 	}
