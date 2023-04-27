@@ -17,13 +17,10 @@ func TestHub(t *testing.T) {
 
 	var results []string
 	makewriter := func(name string) HubWriter[int] {
-		return func(msg HubMessage[int]) error {
-			msgstr := fmt.Sprintf("%03d - %s", msg.Message, name)
+		return func(msg int) error {
+			msgstr := fmt.Sprintf("%03d - %s", msg, name)
 			results = append(results, msgstr)
 			log.Printf("Received: %s", msgstr)
-			if msg.Callback != nil {
-				msg.Callback <- msg.Message
-			}
 			return nil
 		}
 	}
