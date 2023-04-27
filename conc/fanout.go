@@ -10,6 +10,10 @@ type FanOutCmd[T any] struct {
 	RemovedChannel <-chan T
 }
 
+/**
+ * FanOut takes a message from one chanel, applies a mapper function
+ * and fans it out to N output channels.
+ */
 type FanOut[T any, U any] struct {
 	Mapper      func(inputs T) U
 	selfOwnIn   bool
@@ -20,6 +24,9 @@ type FanOut[T any, U any] struct {
 	isRunning   bool
 }
 
+/**
+ * Creates a new IDFanout bridge.
+ */
 func NewIDFanOut[T any](input chan T, mapper func(T) T) *FanOut[T, T] {
 	if mapper == nil {
 		mapper = IDFunc[T]
@@ -86,8 +93,9 @@ func (fo *FanOut[T, U]) start() {
 		for {
 			select {
 			case event := <-fo.inputChan:
+				result := fo.Mapper(event)
 				for _, outputChan := range fo.outputChans {
-					outputChan <- fo.Mapper(event)
+					outputChan <- result
 				}
 				break
 			case cmd := <-fo.cmdChan:
