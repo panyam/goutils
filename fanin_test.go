@@ -9,6 +9,7 @@ import (
 )
 
 func TestFanIn(t *testing.T) {
+	log.Println("===================== TestFanIn =====================")
 	inch := []chan int{
 		make(chan int),
 		make(chan int),

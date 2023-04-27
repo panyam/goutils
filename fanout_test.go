@@ -9,6 +9,7 @@ import (
 )
 
 func TestFanOut(t *testing.T) {
+	log.Println("===================== TestFanOut =====================")
 	fanout := NewIDFanOut[int](nil, nil)
 	fanout.Mapper = IDFunc[int]
 	var vals []int
