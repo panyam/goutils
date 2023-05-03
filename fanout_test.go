@@ -17,7 +17,7 @@ func TestFanOut(t *testing.T) {
 	var m sync.Mutex
 	for o := 0; o < 5; o++ {
 		wg.Add(1)
-		outch := fanout.New()
+		outch := fanout.New(nil)
 		go func(o int, outch <-chan int) {
 			defer fanout.Remove(outch)
 			defer wg.Done()

@@ -4,10 +4,13 @@ import (
 	"sync"
 )
 
-type FanOutCmd[T any] struct {
+type FilterFunc[T any] func(T) bool
+
+type FanOutCmd[T any, U any] struct {
 	Name           string
-	AddedChannel   chan T
-	RemovedChannel <-chan T
+	Filter         FilterFunc[T]
+	AddedChannel   chan U
+	RemovedChannel <-chan U
 }
 
 /**
@@ -15,13 +18,14 @@ type FanOutCmd[T any] struct {
  * and fans it out to N output channels.
  */
 type FanOut[T any, U any] struct {
-	Mapper      func(inputs T) U
-	selfOwnIn   bool
-	inputChan   chan T
-	outputChans []chan U
-	cmdChan     chan FanOutCmd[U]
-	wg          sync.WaitGroup
-	isRunning   bool
+	Mapper        func(inputs T) U
+	selfOwnIn     bool
+	inputChan     chan T
+	outputChans   []chan U
+	outputFilters []FilterFunc[T]
+	cmdChan       chan FanOutCmd[T, U]
+	wg            sync.WaitGroup
+	isRunning     bool
 }
 
 /**
@@ -41,7 +45,7 @@ func NewFanOut[T any, U any](inputChan chan T, mapper func(T) U) *FanOut[T, U] {
 		inputChan = make(chan T)
 	}
 	out := &FanOut[T, U]{
-		cmdChan:   make(chan FanOutCmd[U], 1),
+		cmdChan:   make(chan FanOutCmd[T, U], 1),
 		inputChan: inputChan,
 		selfOwnIn: selfOwnIn,
 		Mapper:    mapper,
@@ -62,18 +66,22 @@ func (fo *FanOut[T, U]) Send(value T) {
 	fo.inputChan <- value
 }
 
-func (fo *FanOut[T, U]) New() <-chan U {
+/**
+ * Adds a new fan out receiver with an optional filter method.   The filter method can
+ * be used to filter out message to certain listeners if necessary.
+ */
+func (fo *FanOut[T, U]) New(filter func(T) bool) <-chan U {
 	output := make(chan U, 1)
-	fo.cmdChan <- FanOutCmd[U]{Name: "add", AddedChannel: output}
+	fo.cmdChan <- FanOutCmd[T, U]{Name: "add", AddedChannel: output, Filter: filter}
 	return output
 }
 
 func (fo *FanOut[T, U]) Remove(output <-chan U) {
-	fo.cmdChan <- FanOutCmd[U]{Name: "remove", RemovedChannel: output}
+	fo.cmdChan <- FanOutCmd[T, U]{Name: "remove", RemovedChannel: output}
 }
 
 func (fo *FanOut[T, U]) Stop() {
-	fo.cmdChan <- FanOutCmd[U]{Name: "stop"}
+	fo.cmdChan <- FanOutCmd[T, U]{Name: "stop"}
 	fo.wg.Wait()
 }
 
@@ -94,8 +102,10 @@ func (fo *FanOut[T, U]) start() {
 			select {
 			case event := <-fo.inputChan:
 				result := fo.Mapper(event)
-				for _, outputChan := range fo.outputChans {
-					outputChan <- result
+				for index, outputChan := range fo.outputChans {
+					if fo.outputFilters[index] == nil || fo.outputFilters[index](event) {
+						outputChan <- result
+					}
 				}
 				break
 			case cmd := <-fo.cmdChan:
@@ -104,6 +114,7 @@ func (fo *FanOut[T, U]) start() {
 				} else if cmd.Name == "add" {
 					// Add a new reader to our list
 					fo.outputChans = append(fo.outputChans, cmd.AddedChannel)
+					fo.outputFilters = append(fo.outputFilters, cmd.Filter)
 				} else if cmd.Name == "remove" {
 					// Remove an existing reader from our list
 					for index, ch := range fo.outputChans {
@@ -111,6 +122,8 @@ func (fo *FanOut[T, U]) start() {
 							close(ch)
 							fo.outputChans[index] = fo.outputChans[len(fo.outputChans)-1]
 							fo.outputChans = fo.outputChans[:len(fo.outputChans)-1]
+							fo.outputFilters[index] = fo.outputFilters[len(fo.outputFilters)-1]
+							fo.outputFilters = fo.outputFilters[:len(fo.outputFilters)-1]
 							break
 						}
 					}
