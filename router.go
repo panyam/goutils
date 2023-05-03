@@ -1,8 +1,6 @@
 package conc
 
-import (
-	"sync"
-)
+type EventType interface{}
 
 /**
  * In our hub the main problem is given a message, identifying
@@ -17,9 +15,10 @@ type Router[M any] interface {
 
 	// Called when a client has dropped off
 	Remove(client *HubClient[M]) error
-	AddRoute(client *HubClient[M], eventKeys ...string) error
-	RemoveRoute(client *HubClient[M], eventKeys ...string) error
-	RouteMessage(eventKey string, msg M, source *HubClient[M]) error
+
+	AddRoute(client *HubClient[M], eventKeys ...EventType) error
+	RemoveRoute(client *HubClient[M], eventKeys ...EventType) error
+	RouteMessage(msg M, err error, source *HubClient[M]) error
 }
 
 /**
@@ -27,22 +26,22 @@ type Router[M any] interface {
  * a fixed event keys.
  */
 type KVRouter[M any] struct {
-	keyToClients map[string][]*HubClient[M]
-	rwlock       sync.RWMutex
+	keyToClients map[EventType][]*HubClient[M]
+	msgToKey     func(msg M) EventType
 }
 
-func NewKVRouter[M any]() *KVRouter[M] {
+func NewKVRouter[M any](msgToKey func(msg M) EventType) *KVRouter[M] {
 	return &KVRouter[M]{
-		keyToClients: make(map[string][]*HubClient[M]),
+		msgToKey:     msgToKey,
+		keyToClients: make(map[EventType][]*HubClient[M]),
 	}
 }
 
-func (r *KVRouter[M]) RouteMessage(eventKey string, msg M, source *HubClient[M]) error {
-	r.rwlock.RLock()
-	defer r.rwlock.RUnlock()
-	for _, client := range r.keyToClients[eventKey] {
+func (r *KVRouter[M]) RouteMessage(msg M, e error, source *HubClient[M]) error {
+	key := r.msgToKey(msg)
+	for _, client := range r.keyToClients[key] {
 		if source != client {
-			if err := client.WriteMessage(msg); err != nil {
+			if err := client.WriteMessage(msg, e); err != nil {
 				// Should we fail - do so for now
 				return err
 			}
@@ -51,9 +50,7 @@ func (r *KVRouter[M]) RouteMessage(eventKey string, msg M, source *HubClient[M])
 	return nil
 }
 
-func (r *KVRouter[M]) AddRoute(client *HubClient[M], eventKeys ...string) error {
-	r.rwlock.Lock()
-	defer r.rwlock.Unlock()
+func (r *KVRouter[M]) AddRoute(client *HubClient[M], eventKeys ...EventType) error {
 	for _, eventKey := range eventKeys {
 		if clients, ok := r.keyToClients[eventKey]; ok {
 			for _, c := range clients {
@@ -68,10 +65,7 @@ func (r *KVRouter[M]) AddRoute(client *HubClient[M], eventKeys ...string) error 
 	return nil
 }
 
-func (r *KVRouter[M]) RemoveRoute(client *HubClient[M], eventKeys ...string) error {
-	r.rwlock.Lock()
-	defer r.rwlock.Unlock()
-
+func (r *KVRouter[M]) RemoveRoute(client *HubClient[M], eventKeys ...EventType) error {
 	for _, eventKey := range eventKeys {
 		r.removeClientFrom(eventKey, client)
 	}
@@ -84,15 +78,13 @@ func (r *KVRouter[M]) Add(client *HubClient[M]) error {
 }
 
 func (r *KVRouter[M]) Remove(client *HubClient[M]) error {
-	r.rwlock.Lock()
-	defer r.rwlock.Unlock()
 	for k, _ := range r.keyToClients {
 		r.removeClientFrom(k, client)
 	}
 	return nil
 }
 
-func (r *KVRouter[M]) removeClientFrom(eventKey string, client *HubClient[M]) {
+func (r *KVRouter[M]) removeClientFrom(eventKey EventType, client *HubClient[M]) {
 	if clients, ok := r.keyToClients[eventKey]; ok {
 		for i, c := range clients {
 			if c.GetId() == client.GetId() {
@@ -112,7 +104,6 @@ func (r *KVRouter[M]) removeClientFrom(eventKey string, client *HubClient[M]) {
  */
 type Broadcaster[M any] struct {
 	allClients map[*HubClient[M]]bool
-	rwlock     sync.RWMutex
 }
 
 func NewBroadcaster[M any]() *Broadcaster[M] {
@@ -121,12 +112,10 @@ func NewBroadcaster[M any]() *Broadcaster[M] {
 	}
 }
 
-func (r *Broadcaster[M]) RouteMessage(eventKey string, msg M, source *HubClient[M]) error {
-	r.rwlock.RLock()
-	defer r.rwlock.RUnlock()
+func (r *Broadcaster[M]) RouteMessage(msg M, e error, source *HubClient[M]) error {
 	for client, _ := range r.allClients {
 		if source != client {
-			if err := client.WriteMessage(msg); err != nil {
+			if err := client.WriteMessage(msg, e); err != nil {
 				// Should we fail - do so for now
 				return err
 			}
@@ -135,27 +124,23 @@ func (r *Broadcaster[M]) RouteMessage(eventKey string, msg M, source *HubClient[
 	return nil
 }
 
-func (r *Broadcaster[M]) AddRoute(client *HubClient[M], eventKeys ...string) error {
+func (r *Broadcaster[M]) AddRoute(client *HubClient[M], eventKeys ...EventType) error {
 	// Does nothign since everything gets forwarded everywhere
 	return nil
 }
 
-func (r *Broadcaster[M]) RemoveRoute(client *HubClient[M], eventKeys ...string) error {
+func (r *Broadcaster[M]) RemoveRoute(client *HubClient[M], eventKeys ...EventType) error {
 	// Does nothign since everything gets forwarded everywhere
 	return nil
 }
 
 func (r *Broadcaster[M]) Add(client *HubClient[M]) error {
 	// Does nothing
-	r.rwlock.Lock()
-	defer r.rwlock.Unlock()
 	r.allClients[client] = true
 	return nil
 }
 
 func (r *Broadcaster[M]) Remove(client *HubClient[M]) error {
-	r.rwlock.Lock()
-	defer r.rwlock.Unlock()
 	if _, ok := r.allClients[client]; ok {
 		delete(r.allClients, client)
 	}

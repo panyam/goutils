@@ -3,10 +3,11 @@ package conc
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
-type HubWriter[M any] func(M) error
+type HubWriter[M any] func(msg M, err error) error
 
 type HubClient[M any] struct {
 	hub          *Hub[M]
@@ -22,18 +23,20 @@ type HubControlEvent[M any] struct {
 	Client               *HubClient[M]
 	Quit                 bool
 	Pause                bool
-	AddedSubscriptions   []string
-	RemovedSubscriptions []string
+	AddedSubscriptions   []EventType
+	RemovedSubscriptions []EventType
 }
 
 type HubMessage[M any] struct {
-	EventKey string
 	Message  M
+	Error    error
 	Callback chan M
 }
 
 type Hub[M any] struct {
-	idCounter      uint64
+	idCounter uint64
+
+	routerLock     sync.RWMutex
 	router         Router[M]
 	controlChannel chan *HubControlEvent[M]
 	newMsgChannel  chan HubMessage[M]
@@ -42,7 +45,7 @@ type Hub[M any] struct {
 
 func NewHub[M any](router Router[M]) *Hub[M] {
 	if router == nil {
-		router = NewKVRouter[M]()
+		router = NewBroadcaster[M]()
 	}
 	out := &Hub[M]{
 		router:         router,
@@ -63,6 +66,8 @@ func (h *Hub[M]) Connect(writer HubWriter[M]) *HubClient[M] {
 		WriteMessage: writer,
 	}
 	h.idCounter++
+	h.routerLock.Lock()
+	defer h.routerLock.Unlock()
 	h.router.Add(&hc)
 	return &hc
 }
@@ -100,8 +105,8 @@ func (s *Hub[M]) start() error {
 			break
 		case msg := <-s.newMsgChannel:
 			// Handle fanout here
-			// how can we add source here?
-			s.router.RouteMessage(msg.EventKey, msg.Message, nil)
+			// TODO - how can we add error and source here?
+			s.router.RouteMessage(msg.Message, nil, nil)
 			if msg.Callback != nil {
 				msg.Callback <- msg.Message
 			}
@@ -117,24 +122,24 @@ func (h *HubClient[M]) Disconnect() {
 	}
 }
 
-func (h *HubClient[M]) Subscribe(eventKeys ...string) {
+func (h *HubClient[M]) Subscribe(eventTypes ...EventType) {
 	h.hub.controlChannel <- &HubControlEvent[M]{
 		Client:             h,
-		AddedSubscriptions: eventKeys,
+		AddedSubscriptions: eventTypes,
 	}
 }
 
-func (h *HubClient[M]) Unsubscribe(eventKeys ...string) {
+func (h *HubClient[M]) Unsubscribe(eventTypes ...EventType) {
 	h.hub.controlChannel <- &HubControlEvent[M]{
 		Client:               h,
-		RemovedSubscriptions: eventKeys,
+		RemovedSubscriptions: eventTypes,
 	}
 }
 
-func (s *Hub[M]) Send(eventKey string, message M, callbackChan chan M) error {
+func (s *Hub[M]) Send(message M, err error, callbackChan chan M) error {
 	s.newMsgChannel <- HubMessage[M]{
-		EventKey: eventKey,
 		Message:  message,
+		Error:    err,
 		Callback: callbackChan,
 	}
 	return nil
