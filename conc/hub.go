@@ -63,6 +63,7 @@ func (h *Hub[M]) Connect(writer HubWriter[M]) *HubClient[M] {
 		WriteMessage: writer,
 	}
 	h.idCounter++
+	h.router.Add(&hc)
 	return &hc
 }
 
@@ -99,7 +100,8 @@ func (s *Hub[M]) start() error {
 			break
 		case msg := <-s.newMsgChannel:
 			// Handle fanout here
-			s.router.RouteMessage(msg.EventKey, msg.Message)
+			// how can we add source here?
+			s.router.RouteMessage(msg.EventKey, msg.Message, nil)
 			if msg.Callback != nil {
 				msg.Callback <- msg.Message
 			}
