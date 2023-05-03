@@ -17,7 +17,7 @@ func TestHub(t *testing.T) {
 
 	var results []string
 	makewriter := func(name string) HubWriter[int] {
-		return func(msg int) error {
+		return func(key string, msg int, err error) error {
 			msgstr := fmt.Sprintf("%03d - %s", msg, name)
 			results = append(results, msgstr)
 			log.Printf("Received: %s", msgstr)
@@ -33,14 +33,14 @@ func TestHub(t *testing.T) {
 
 	callback := make(chan int)
 	defer close(callback)
-	hub.Send("a", 1, nil)
-	hub.Send("b", 2, nil)
-	hub.Send("c", 3, nil)
-	hub.Send("d", 4, nil)
-	hub.Send("e", 5, nil)
-	hub.Send("f", 6, nil)
-	hub.Send("g", 7, nil)
-	hub.Send("h", 8, callback)
+	hub.Send("a", 1, nil, nil)
+	hub.Send("b", 2, nil, nil)
+	hub.Send("c", 3, nil, nil)
+	hub.Send("d", 4, nil, nil)
+	hub.Send("e", 5, nil, nil)
+	hub.Send("f", 6, nil, nil)
+	hub.Send("g", 7, nil, nil)
+	hub.Send("h", 8, nil, callback)
 	<-callback
 
 	sort.Strings(results)
@@ -63,7 +63,7 @@ func TestHub(t *testing.T) {
 	// Now try to remove subscriptions
 	c1.Unsubscribe("a", "c")
 	c2.Subscribe("a")
-	hub.Send("a", 9, callback)
+	hub.Send("a", 9, nil, callback)
 	<-callback
 	// log.Println("Result after 9 -> a: ", results)
 	assert.Equal(t, results, []string{
@@ -91,7 +91,7 @@ func TestHubWithBroadcaster(t *testing.T) {
 
 	var results []string
 	makewriter := func(name string) HubWriter[int] {
-		return func(msg int) error {
+		return func(eventKey string, msg int, err error) error {
 			msgstr := fmt.Sprintf("%03d - %s", msg, name)
 			results = append(results, msgstr)
 			log.Printf("Received: %s", msgstr)
@@ -107,10 +107,10 @@ func TestHubWithBroadcaster(t *testing.T) {
 
 	callback := make(chan int)
 	defer close(callback)
-	hub.Send("a", 1, nil)
-	hub.Send("b", 2, nil)
-	hub.Send("c", 3, nil)
-	hub.Send("d", 4, callback)
+	hub.Send("a", 1, nil, nil)
+	hub.Send("b", 2, nil, nil)
+	hub.Send("c", 3, nil, nil)
+	hub.Send("d", 4, nil, callback)
 	<-callback
 
 	sort.Strings(results)
@@ -133,7 +133,7 @@ func TestHubWithBroadcaster(t *testing.T) {
 	// Now try to remove subscriptions
 	c1.Unsubscribe("a", "c")
 	c2.Subscribe("a")
-	hub.Send("a", 9, callback)
+	hub.Send("a", 9, nil, callback)
 	<-callback
 	// log.Println("Result after 9 -> a: ", results)
 	assert.Equal(t, results, []string{
