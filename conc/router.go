@@ -1,7 +1,5 @@
 package conc
 
-type EventType interface{}
-
 /**
  * In our hub the main problem is given a message, identifying
  * all clients it should be sent to.  Instead of having a fixed
@@ -16,24 +14,24 @@ type Router[M any] interface {
 	// Called when a client has dropped off
 	Remove(client *HubClient[M]) error
 
-	AddRoute(client *HubClient[M], eventKeys ...EventType) error
-	RemoveRoute(client *HubClient[M], eventKeys ...EventType) error
+	AddRoute(client *HubClient[M], topicIds ...TopicIdType) error
+	RemoveRoute(client *HubClient[M], topicIds ...TopicIdType) error
 	RouteMessage(msg M, err error, source *HubClient[M]) error
 }
 
 /**
- * A type of router that maintains an eventKey -> Conn[] by
- * a fixed event keys.
+ * A type of router that maintains an topicId -> Conn[] by
+ * a fixed topics.
  */
 type KVRouter[M any] struct {
-	keyToClients map[EventType][]*HubClient[M]
-	msgToKey     func(msg M) EventType
+	keyToClients map[TopicIdType][]*HubClient[M]
+	msgToKey     func(msg M) TopicIdType
 }
 
-func NewKVRouter[M any](msgToKey func(msg M) EventType) *KVRouter[M] {
+func NewKVRouter[M any](msgToKey func(msg M) TopicIdType) *KVRouter[M] {
 	return &KVRouter[M]{
 		msgToKey:     msgToKey,
-		keyToClients: make(map[EventType][]*HubClient[M]),
+		keyToClients: make(map[TopicIdType][]*HubClient[M]),
 	}
 }
 
@@ -50,9 +48,9 @@ func (r *KVRouter[M]) RouteMessage(msg M, e error, source *HubClient[M]) error {
 	return nil
 }
 
-func (r *KVRouter[M]) AddRoute(client *HubClient[M], eventKeys ...EventType) error {
-	for _, eventKey := range eventKeys {
-		if clients, ok := r.keyToClients[eventKey]; ok {
+func (r *KVRouter[M]) AddRoute(client *HubClient[M], topicIds ...TopicIdType) error {
+	for _, topicId := range topicIds {
+		if clients, ok := r.keyToClients[topicId]; ok {
 			for _, c := range clients {
 				if c.GetId() == client.GetId() {
 					// Already exists
@@ -60,14 +58,14 @@ func (r *KVRouter[M]) AddRoute(client *HubClient[M], eventKeys ...EventType) err
 				}
 			}
 		}
-		r.keyToClients[eventKey] = append(r.keyToClients[eventKey], client)
+		r.keyToClients[topicId] = append(r.keyToClients[topicId], client)
 	}
 	return nil
 }
 
-func (r *KVRouter[M]) RemoveRoute(client *HubClient[M], eventKeys ...EventType) error {
-	for _, eventKey := range eventKeys {
-		r.removeClientFrom(eventKey, client)
+func (r *KVRouter[M]) RemoveRoute(client *HubClient[M], topicIds ...TopicIdType) error {
+	for _, topicId := range topicIds {
+		r.removeClientFrom(topicId, client)
 	}
 	return nil
 }
@@ -84,14 +82,14 @@ func (r *KVRouter[M]) Remove(client *HubClient[M]) error {
 	return nil
 }
 
-func (r *KVRouter[M]) removeClientFrom(eventKey EventType, client *HubClient[M]) {
-	if clients, ok := r.keyToClients[eventKey]; ok {
+func (r *KVRouter[M]) removeClientFrom(topicId TopicIdType, client *HubClient[M]) {
+	if clients, ok := r.keyToClients[topicId]; ok {
 		for i, c := range clients {
 			if c.GetId() == client.GetId() {
 				// Found it - remove and exit (order not import so just replace
 				// with last and trim
 				clients[i] = clients[len(clients)-1]
-				r.keyToClients[eventKey] = clients[:len(clients)-1]
+				r.keyToClients[topicId] = clients[:len(clients)-1]
 				break
 			}
 		}
@@ -124,12 +122,12 @@ func (r *Broadcaster[M]) RouteMessage(msg M, e error, source *HubClient[M]) erro
 	return nil
 }
 
-func (r *Broadcaster[M]) AddRoute(client *HubClient[M], eventKeys ...EventType) error {
+func (r *Broadcaster[M]) AddRoute(client *HubClient[M], topicIds ...TopicIdType) error {
 	// Does nothign since everything gets forwarded everywhere
 	return nil
 }
 
-func (r *Broadcaster[M]) RemoveRoute(client *HubClient[M], eventKeys ...EventType) error {
+func (r *Broadcaster[M]) RemoveRoute(client *HubClient[M], topicIds ...TopicIdType) error {
 	// Does nothign since everything gets forwarded everywhere
 	return nil
 }

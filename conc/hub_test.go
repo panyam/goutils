@@ -95,7 +95,7 @@ func TestHubWithBroadcaster(t *testing.T) {
 
 func TestHubWithKVRouter(t *testing.T) {
 	log.Println("===================== TestHubWithKVRouter =====================")
-	router := NewKVRouter(func(msg Msg) EventType {
+	router := NewKVRouter(func(msg Msg) TopicIdType {
 		return msg.topic
 	})
 	hub := NewHub[Msg](router)
