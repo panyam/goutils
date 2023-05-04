@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+type TopicIdType interface{}
+
 type HubWriter[M any] func(msg M, err error) error
 
 type HubClient[M any] struct {
@@ -23,8 +25,8 @@ type HubControlEvent[M any] struct {
 	Client               *HubClient[M]
 	Quit                 bool
 	Pause                bool
-	AddedSubscriptions   []EventType
-	RemovedSubscriptions []EventType
+	AddedSubscriptions   []TopicIdType
+	RemovedSubscriptions []TopicIdType
 }
 
 type HubMessage[M any] struct {
@@ -122,17 +124,17 @@ func (h *HubClient[M]) Disconnect() {
 	}
 }
 
-func (h *HubClient[M]) Subscribe(eventTypes ...EventType) {
+func (h *HubClient[M]) Subscribe(topicIds ...TopicIdType) {
 	h.hub.controlChannel <- &HubControlEvent[M]{
 		Client:             h,
-		AddedSubscriptions: eventTypes,
+		AddedSubscriptions: topicIds,
 	}
 }
 
-func (h *HubClient[M]) Unsubscribe(eventTypes ...EventType) {
+func (h *HubClient[M]) Unsubscribe(topicIds ...TopicIdType) {
 	h.hub.controlChannel <- &HubControlEvent[M]{
 		Client:               h,
-		RemovedSubscriptions: eventTypes,
+		RemovedSubscriptions: topicIds,
 	}
 }
 
