@@ -3,7 +3,6 @@ package conc
 import (
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
@@ -11,16 +10,17 @@ import (
 type TopicIdType interface{}
 
 // A function that can write to a particular hub
-type HubWriter[M any] func(msg M, err error) error
+type HubWriter[M any] func(ValueOrError[M]) error
 
 // A function for reading from a hub
-type HubReader[M any] func() (msg M, err error)
+type HubReader[M any] func() ValueOrError[M]
 
 type HubClient[M any] struct {
-	hub   *Hub[M]
-	id    string
-	Write HubWriter[M]
-	Read  HubReader[M]
+	hub     *Hub[M]
+	id      string
+	Write   HubWriter[M]
+	Read    HubReader[M]
+	OnClose func()
 }
 
 func (h *HubClient[M]) GetId() string {
@@ -36,8 +36,7 @@ type HubControlEvent[M any] struct {
 }
 
 type HubMessage[M any] struct {
-	Message  M
-	Error    error
+	Message  ValueOrError[M]
 	Callback chan M
 }
 
@@ -92,10 +91,9 @@ func (h *Hub[M]) Connect(reader HubReader[M], writer HubWriter[M]) (*HubClient[M
 		// and send to the hub
 		go func() {
 			for {
-				msg, err := hc.Read()
-				log.Println("MERR: ", msg, err)
-				h.Send(msg, err, nil)
-				if err != nil {
+				msg := hc.Read()
+				h.Send(msg, nil)
+				if msg.Error != nil || msg.Closed {
 					return
 				}
 			}
@@ -136,9 +134,9 @@ func (s *Hub[M]) start() error {
 		case msg := <-s.newMsgChannel:
 			// Handle fanout here
 			// TODO - how can we add error and source here?
-			s.router.RouteMessage(msg.Message, msg.Error, nil)
+			s.router.RouteMessage(msg.Message, nil)
 			if msg.Callback != nil {
-				msg.Callback <- msg.Message
+				msg.Callback <- msg.Message.Value
 			}
 			break
 		}
@@ -166,10 +164,9 @@ func (h *HubClient[M]) Unsubscribe(topicIds ...TopicIdType) {
 	}
 }
 
-func (s *Hub[M]) Send(message M, err error, callbackChan chan M) error {
+func (s *Hub[M]) Send(message ValueOrError[M], callbackChan chan M) error {
 	s.newMsgChannel <- HubMessage[M]{
 		Message:  message,
-		Error:    err,
 		Callback: callbackChan,
 	}
 	return nil
