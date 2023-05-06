@@ -1,6 +1,7 @@
 package conc
 
 type Pipe[T any, U any] struct {
+	OnClose     func()
 	input       <-chan T
 	output      chan<- U
 	stoppedChan chan bool
@@ -11,7 +12,7 @@ func NewIDPipe[T any](input <-chan T, output chan<- T, mapper func(T) T) *Pipe[T
 	if mapper == nil {
 		mapper = IDFunc[T]
 	}
-	out := NewPipe[T, T](input, output, mapper)
+	out := NewPipe(input, output, mapper)
 	return out
 }
 
@@ -35,6 +36,9 @@ func (p *Pipe[T, U]) start() {
 		defer func() {
 			close(p.stoppedChan)
 			p.stoppedChan = nil
+			if p.OnClose != nil {
+				p.OnClose()
+			}
 		}()
 		for {
 			select {

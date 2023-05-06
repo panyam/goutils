@@ -1,6 +1,7 @@
 package conc
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -9,12 +10,17 @@ import (
 
 type TopicIdType interface{}
 
+// A function that can write to a particular hub
 type HubWriter[M any] func(msg M, err error) error
 
+// A function for reading from a hub
+type HubReader[M any] func() (msg M, err error)
+
 type HubClient[M any] struct {
-	hub          *Hub[M]
-	id           string
-	WriteMessage HubWriter[M]
+	hub   *Hub[M]
+	id    string
+	Write HubWriter[M]
+	Read  HubReader[M]
 }
 
 func (h *HubClient[M]) GetId() string {
@@ -59,29 +65,51 @@ func NewHub[M any](router Router[M]) *Hub[M] {
 	return out
 }
 
-func (h *Hub[M]) Connect(writer HubWriter[M]) *HubClient[M] {
+var (
+	InvalidHubClientError = errors.New("A hub client must have either a reader or a writer or both")
+)
+
+func (h *Hub[M]) Connect(reader HubReader[M], writer HubWriter[M]) (*HubClient[M], error) {
+	if reader == nil && writer == nil {
+		return nil, InvalidHubClientError
+	}
 	// Pause till it is closed - in the mean time the publisher will
 	// be sending messages with queued up events on this channel
 	hc := HubClient[M]{
-		hub:          h,
-		id:           fmt.Sprintf("%d", h.idCounter),
-		WriteMessage: writer,
+		hub:   h,
+		id:    fmt.Sprintf("%d", h.idCounter),
+		Read:  reader,
+		Write: writer,
 	}
 	h.idCounter++
-	h.routerLock.Lock()
-	defer h.routerLock.Unlock()
-	h.router.Add(&hc)
-	return &hc
+	if hc.Write != nil {
+		h.routerLock.Lock()
+		defer h.routerLock.Unlock()
+		h.router.Add(&hc)
+	}
+	if hc.Read != nil {
+		// start a go routine that can be used to continually read from here
+		// and send to the hub
+		go func() {
+			for {
+				msg, err := hc.Read()
+				log.Println("MERR: ", msg, err)
+				h.Send(msg, err, nil)
+				if err != nil {
+					return
+				}
+			}
+		}()
+	}
+	return &hc, nil
 }
 
 func (s *Hub[M]) start() error {
 	// 1. First start a stream with a reader so we can read sub/unsub
 	// messages on this
-	log.Println("Starting Hub...")
 	ticker := time.NewTicker(1 * time.Second)
 
 	defer func() {
-		log.Println("Stopping Hub")
 		close(s.controlChannel)
 		close(s.newMsgChannel)
 		close(s.stopChannel)
@@ -108,7 +136,7 @@ func (s *Hub[M]) start() error {
 		case msg := <-s.newMsgChannel:
 			// Handle fanout here
 			// TODO - how can we add error and source here?
-			s.router.RouteMessage(msg.Message, nil, nil)
+			s.router.RouteMessage(msg.Message, msg.Error, nil)
 			if msg.Callback != nil {
 				msg.Callback <- msg.Message
 			}
