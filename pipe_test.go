@@ -19,7 +19,7 @@ func TestPipe(t *testing.T) {
 
 	go func() {
 		for i := 0; i < maxNums; i++ {
-			log.Println("Written: ", i)
+			// log.Println("Written: ", i)
 			inch <- i
 		}
 		pipe.Stop()
@@ -28,7 +28,7 @@ func TestPipe(t *testing.T) {
 
 	for i := 0; i < maxNums; i++ {
 		v := <-outch
-		log.Println("Read: ", v)
+		// log.Println("Read: ", v)
 		vals = append(vals, v)
 	}
 	wg.Wait()

@@ -23,7 +23,7 @@ func TestHubWithBroadcaster(t *testing.T) {
 		return func(msg ValueOrError[Msg]) error {
 			msgstr := fmt.Sprintf("%03d - %s - %s", msg.Value.value, msg.Value.topic, name)
 			results = append(results, msgstr)
-			log.Printf("Received: %s", msgstr)
+			// log.Printf("Received: %s", msgstr)
 			return nil
 		}
 	}
@@ -106,7 +106,7 @@ func TestHubWithKVRouter(t *testing.T) {
 		return func(msg ValueOrError[Msg]) error {
 			msgstr := fmt.Sprintf("%03d - %s - %s", msg.Value.value, msg.Value.topic, name)
 			results = append(results, msgstr)
-			log.Printf("Received: %s", msgstr)
+			// log.Printf("Received: %s", msgstr)
 			return nil
 		}
 	}
@@ -181,7 +181,7 @@ func TestHubWithReaders(t *testing.T) {
 		return func(msg ValueOrError[Msg]) error {
 			msgstr := fmt.Sprintf("%03d - %s - %s", msg.Value.value, msg.Value.topic, name)
 			results = append(results, msgstr)
-			log.Printf("Received: %s", msgstr)
+			// log.Printf("Received: %s", msgstr)
 			return nil
 		}
 	}
@@ -213,7 +213,7 @@ func TestHubWithReaders(t *testing.T) {
 	log.Println("results: ", results)
 	// hub.Stop()
 
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 1)
 	sort.Strings(results)
 	assert.Equal(t, results, []string{
 		"001 - r1 - c1",
