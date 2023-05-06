@@ -39,7 +39,7 @@ func (r *KVRouter[M]) RouteMessage(msg M, e error, source *HubClient[M]) error {
 	key := r.msgToKey(msg)
 	for _, client := range r.keyToClients[key] {
 		if source != client {
-			if err := client.WriteMessage(msg, e); err != nil {
+			if err := client.Write(msg, e); err != nil {
 				// Should we fail - do so for now
 				return err
 			}
@@ -89,7 +89,8 @@ func (r *KVRouter[M]) removeClientFrom(topicId TopicIdType, client *HubClient[M]
 				// Found it - remove and exit (order not import so just replace
 				// with last and trim
 				clients[i] = clients[len(clients)-1]
-				r.keyToClients[topicId] = clients[:len(clients)-1]
+				clients = clients[:len(clients)-1]
+				r.keyToClients[topicId] = clients
 				break
 			}
 		}
@@ -113,7 +114,7 @@ func NewBroadcaster[M any]() *Broadcaster[M] {
 func (r *Broadcaster[M]) RouteMessage(msg M, e error, source *HubClient[M]) error {
 	for client, _ := range r.allClients {
 		if source != client {
-			if err := client.WriteMessage(msg, e); err != nil {
+			if err := client.Write(msg, e); err != nil {
 				// Should we fail - do so for now
 				return err
 			}

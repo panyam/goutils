@@ -1,11 +1,13 @@
 package conc
 
 import (
+	"errors"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"log"
 	"sort"
 	"testing"
+	"time"
 )
 
 type Msg struct {
@@ -26,11 +28,11 @@ func TestHubWithBroadcaster(t *testing.T) {
 			return nil
 		}
 	}
-	c1 := hub.Connect(makewriter("c1"))
+	c1, _ := hub.Connect(nil, makewriter("c1"))
 	c1.Subscribe("a", "b", "c", "d")
-	c2 := hub.Connect(makewriter("c2"))
+	c2, _ := hub.Connect(nil, makewriter("c2"))
 	c2.Subscribe("c", "d", "e", "f")
-	c3 := hub.Connect(makewriter("c3"))
+	c3, _ := hub.Connect(nil, makewriter("c3"))
 	c3.Subscribe("e", "f", "g", "h")
 
 	callback := make(chan Msg)
@@ -109,11 +111,11 @@ func TestHubWithKVRouter(t *testing.T) {
 			return nil
 		}
 	}
-	c1 := hub.Connect(makewriter("c1"))
+	c1, _ := hub.Connect(nil, makewriter("c1"))
 	c1.Subscribe("a", "b", "c", "d")
-	c2 := hub.Connect(makewriter("c2"))
+	c2, _ := hub.Connect(nil, makewriter("c2"))
 	c2.Subscribe("c", "d", "e", "f")
-	c3 := hub.Connect(makewriter("c3"))
+	c3, _ := hub.Connect(nil, makewriter("c3"))
 	c3.Subscribe("e", "f", "g", "h")
 
 	callback := make(chan Msg)
@@ -169,4 +171,91 @@ func TestHubWithKVRouter(t *testing.T) {
 	})
 
 	hub.Stop()
+}
+
+func TestHubWithReaders(t *testing.T) {
+	log.Println("===================== TestHubWithReaders =====================")
+	hub := NewHub[Msg](nil)
+
+	var results []string
+	makewriter := func(name string) HubWriter[Msg] {
+		return func(msg Msg, err error) error {
+			msgstr := fmt.Sprintf("%03d - %s - %s", msg.value, msg.topic, name)
+			results = append(results, msgstr)
+			log.Printf("Received: %s", msgstr)
+			return nil
+		}
+	}
+	Done := errors.New("DONE")
+	makereader := func(name string, start, end int) HubReader[Msg] {
+		curr := start
+		return func() (msg Msg, err error) {
+			if curr <= end {
+				curr += 1
+			} else {
+				return Msg{topic: name, value: end + 1}, Done
+			}
+			return Msg{
+				topic: name,
+				value: curr - 1,
+			}, nil
+		}
+	}
+	c1, _ := hub.Connect(nil, makewriter("c1"))
+	c1.Subscribe("a", "b", "c", "d")
+	c2, _ := hub.Connect(nil, makewriter("c2"))
+	c2.Subscribe("c", "d", "e", "f")
+	c3, _ := hub.Connect(nil, makewriter("c3"))
+	c3.Subscribe("e", "f", "g", "h")
+
+	hub.Connect(makereader("r1", 1, 5), nil)
+	hub.Connect(makereader("r2", 10, 15), nil)
+	// log.Println("Result after 8 -> h: ", results)
+
+	log.Println("results: ", results)
+	// hub.Stop()
+
+	time.Sleep(time.Second * 2)
+	sort.Strings(results)
+	assert.Equal(t, results, []string{
+		"001 - r1 - c1",
+		"001 - r1 - c2",
+		"001 - r1 - c3",
+		"002 - r1 - c1",
+		"002 - r1 - c2",
+		"002 - r1 - c3",
+		"003 - r1 - c1",
+		"003 - r1 - c2",
+		"003 - r1 - c3",
+		"004 - r1 - c1",
+		"004 - r1 - c2",
+		"004 - r1 - c3",
+		"005 - r1 - c1",
+		"005 - r1 - c2",
+		"005 - r1 - c3",
+		"006 - r1 - c1",
+		"006 - r1 - c2",
+		"006 - r1 - c3",
+		"010 - r2 - c1",
+		"010 - r2 - c2",
+		"010 - r2 - c3",
+		"011 - r2 - c1",
+		"011 - r2 - c2",
+		"011 - r2 - c3",
+		"012 - r2 - c1",
+		"012 - r2 - c2",
+		"012 - r2 - c3",
+		"013 - r2 - c1",
+		"013 - r2 - c2",
+		"013 - r2 - c3",
+		"014 - r2 - c1",
+		"014 - r2 - c2",
+		"014 - r2 - c3",
+		"015 - r2 - c1",
+		"015 - r2 - c2",
+		"015 - r2 - c3",
+		"016 - r2 - c1",
+		"016 - r2 - c2",
+		"016 - r2 - c3",
+	})
 }
