@@ -25,7 +25,7 @@ func TestFanOut(t *testing.T) {
 				// log.Printf("Waiting to receive, in outch: %d", o)
 				i := <-outch
 				m.Lock()
-				log.Printf("Received %d, in outch: %d, Len: %d", i, o, len(vals))
+				// log.Printf("Received %d, in outch: %d, Len: %d", i, o, len(vals))
 				vals = append(vals, i)
 				m.Unlock()
 			}
@@ -39,7 +39,7 @@ func TestFanOut(t *testing.T) {
 
 	// Sort since fanout can combine in any order
 	sort.Ints(vals)
-	log.Println("Vals: ", vals)
+	// log.Println("Vals: ", vals)
 	for i := 0; i < 50; i++ {
 		assert.Equal(t, vals[i], i/5, "Out vals dont match")
 	}

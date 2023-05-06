@@ -27,7 +27,7 @@ func TestFanIn(t *testing.T) {
 		n := 0
 		for fanin.IsRunning() {
 			i := <-fanin.Channel()
-			log.Println("Received: ", i)
+			// log.Println("Received: ", i)
 			vals = append(vals, i)
 			n += 1
 			if n >= 15 {
@@ -41,11 +41,11 @@ func TestFanIn(t *testing.T) {
 		fanin.Add(inch[ch])
 		for msg := 0; msg < 3; msg++ {
 			v := ch*3 + msg
-			log.Println("Writing values: ", v)
+			// log.Println("Writing values: ", v)
 			inch[ch] <- v
 		}
 	}
-	log.Println("Waiting to finish...")
+	// log.Println("Waiting to finish...")
 	wg.Wait()
 
 	// Sort since fanin can combine in any order

@@ -5,14 +5,16 @@ import (
 	"time"
 )
 
+type ReaderFunc[R any] func() (R, error)
+
 type ReaderChan[R any] struct {
 	ReaderWriterBase[R]
 	msgChannel chan ValueOrError[R]
-	Read       func() (R, error)
+	Read       ReaderFunc[R]
 	OnClose    func()
 }
 
-func NewReader[R any](read func() (R, error)) *ReaderChan[R] {
+func NewReader[R any](read ReaderFunc[R]) *ReaderChan[R] {
 	out := ReaderChan[R]{
 		ReaderWriterBase: ReaderWriterBase[R]{
 			WaitTime: 10 * time.Second,
