@@ -5,6 +5,7 @@ func IDFunc[T any](input T) T {
 }
 
 type ValueOrError[T any] struct {
-	Value T
-	Error error
+	Value  T
+	Error  error
+	Closed bool
 }

@@ -1,7 +1,6 @@
 package conc
 
 import (
-	"errors"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"log"
@@ -21,8 +20,8 @@ func TestHubWithBroadcaster(t *testing.T) {
 
 	var results []string
 	makewriter := func(name string) HubWriter[Msg] {
-		return func(msg Msg, err error) error {
-			msgstr := fmt.Sprintf("%03d - %s - %s", msg.value, msg.topic, name)
+		return func(msg ValueOrError[Msg]) error {
+			msgstr := fmt.Sprintf("%03d - %s - %s", msg.Value.value, msg.Value.topic, name)
 			results = append(results, msgstr)
 			log.Printf("Received: %s", msgstr)
 			return nil
@@ -37,11 +36,11 @@ func TestHubWithBroadcaster(t *testing.T) {
 
 	callback := make(chan Msg)
 	defer close(callback)
-	hub.Send(Msg{"a", 1}, nil, nil)
-	hub.Send(Msg{"b", 2}, nil, nil)
-	hub.Send(Msg{"c", 3}, nil, nil)
-	hub.Send(Msg{"d", 4}, nil, nil)
-	hub.Send(Msg{"e", 5}, nil, callback)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"a", 1}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"b", 2}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"c", 3}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"d", 4}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"e", 5}}, callback)
 	<-callback
 
 	sort.Strings(results)
@@ -67,7 +66,7 @@ func TestHubWithBroadcaster(t *testing.T) {
 	// Now try to remove subscriptions
 	c1.Unsubscribe("a", "c")
 	c2.Subscribe("a")
-	hub.Send(Msg{"a", 6}, nil, callback)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"a", 6}}, callback)
 	<-callback
 	// log.Println("Result after 9 -> a: ", results)
 	sort.Strings(results)
@@ -104,8 +103,8 @@ func TestHubWithKVRouter(t *testing.T) {
 
 	var results []string
 	makewriter := func(name string) HubWriter[Msg] {
-		return func(msg Msg, err error) error {
-			msgstr := fmt.Sprintf("%03d - %s - %s", msg.value, msg.topic, name)
+		return func(msg ValueOrError[Msg]) error {
+			msgstr := fmt.Sprintf("%03d - %s - %s", msg.Value.value, msg.Value.topic, name)
 			results = append(results, msgstr)
 			log.Printf("Received: %s", msgstr)
 			return nil
@@ -120,14 +119,14 @@ func TestHubWithKVRouter(t *testing.T) {
 
 	callback := make(chan Msg)
 	defer close(callback)
-	hub.Send(Msg{"a", 1}, nil, nil)
-	hub.Send(Msg{"b", 2}, nil, nil)
-	hub.Send(Msg{"c", 3}, nil, nil)
-	hub.Send(Msg{"d", 4}, nil, nil)
-	hub.Send(Msg{"e", 5}, nil, nil)
-	hub.Send(Msg{"f", 6}, nil, nil)
-	hub.Send(Msg{"g", 7}, nil, nil)
-	hub.Send(Msg{"h", 8}, nil, callback)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"a", 1}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"b", 2}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"c", 3}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"d", 4}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"e", 5}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"f", 6}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"g", 7}}, nil)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"h", 8}}, callback)
 	<-callback
 
 	sort.Strings(results)
@@ -150,7 +149,7 @@ func TestHubWithKVRouter(t *testing.T) {
 	// Now try to remove subscriptions
 	c1.Unsubscribe("a", "c")
 	c2.Subscribe("a")
-	hub.Send(Msg{"a", 9}, nil, callback)
+	hub.Send(ValueOrError[Msg]{Value: Msg{"a", 9}}, callback)
 	<-callback
 	// log.Println("Result after 9 -> a: ", results)
 	sort.Strings(results)
@@ -179,26 +178,25 @@ func TestHubWithReaders(t *testing.T) {
 
 	var results []string
 	makewriter := func(name string) HubWriter[Msg] {
-		return func(msg Msg, err error) error {
-			msgstr := fmt.Sprintf("%03d - %s - %s", msg.value, msg.topic, name)
+		return func(msg ValueOrError[Msg]) error {
+			msgstr := fmt.Sprintf("%03d - %s - %s", msg.Value.value, msg.Value.topic, name)
 			results = append(results, msgstr)
 			log.Printf("Received: %s", msgstr)
 			return nil
 		}
 	}
-	Done := errors.New("DONE")
 	makereader := func(name string, start, end int) HubReader[Msg] {
 		curr := start
-		return func() (msg Msg, err error) {
+		return func() (msg ValueOrError[Msg]) {
 			if curr <= end {
 				curr += 1
 			} else {
-				return Msg{topic: name, value: end + 1}, Done
+				return ValueOrError[Msg]{Value: Msg{topic: name, value: end + 1}, Closed: true}
 			}
-			return Msg{
+			return ValueOrError[Msg]{Value: Msg{
 				topic: name,
 				value: curr - 1,
-			}, nil
+			}}
 		}
 	}
 	c1, _ := hub.Connect(nil, makewriter("c1"))

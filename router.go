@@ -16,7 +16,7 @@ type Router[M any] interface {
 
 	AddRoute(client *HubClient[M], topicIds ...TopicIdType) error
 	RemoveRoute(client *HubClient[M], topicIds ...TopicIdType) error
-	RouteMessage(msg M, err error, source *HubClient[M]) error
+	RouteMessage(msg ValueOrError[M], source *HubClient[M]) error
 }
 
 /**
@@ -35,11 +35,11 @@ func NewKVRouter[M any](msgToKey func(msg M) TopicIdType) *KVRouter[M] {
 	}
 }
 
-func (r *KVRouter[M]) RouteMessage(msg M, e error, source *HubClient[M]) error {
-	key := r.msgToKey(msg)
+func (r *KVRouter[M]) RouteMessage(msg ValueOrError[M], source *HubClient[M]) error {
+	key := r.msgToKey(msg.Value)
 	for _, client := range r.keyToClients[key] {
 		if source != client {
-			if err := client.Write(msg, e); err != nil {
+			if err := client.Write(msg); err != nil {
 				// Should we fail - do so for now
 				return err
 			}
@@ -111,10 +111,10 @@ func NewBroadcaster[M any]() *Broadcaster[M] {
 	}
 }
 
-func (r *Broadcaster[M]) RouteMessage(msg M, e error, source *HubClient[M]) error {
+func (r *Broadcaster[M]) RouteMessage(msg ValueOrError[M], source *HubClient[M]) error {
 	for client, _ := range r.allClients {
 		if source != client {
-			if err := client.Write(msg, e); err != nil {
+			if err := client.Write(msg); err != nil {
 				// Should we fail - do so for now
 				return err
 			}
