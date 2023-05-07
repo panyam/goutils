@@ -30,6 +30,10 @@ func (ch *WriterChan[T]) cleanup() {
 	ch.ReaderWriterBase.cleanup()
 }
 
+func (wc *WriterChan[W]) SendChan() chan W {
+	return wc.msgChannel
+}
+
 func (wc *WriterChan[W]) Send(req W) bool {
 	if !wc.IsRunning() {
 		log.Println("Connection is not running")
