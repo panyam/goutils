@@ -18,7 +18,7 @@ func TestFanOut(t *testing.T) {
 	for o := 0; o < 5; o++ {
 		wg.Add(1)
 		outch := fanout.New(nil)
-		go func(o int, outch <-chan int) {
+		go func(o int, outch chan int) {
 			defer fanout.Remove(outch)
 			defer wg.Done()
 			for count := 0; count < 10; count++ { //i fanout.IsRunning() {

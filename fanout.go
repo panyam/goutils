@@ -9,8 +9,9 @@ type FilterFunc[T any] func(T) bool
 type FanOutCmd[T any, U any] struct {
 	Name           string
 	Filter         FilterFunc[T]
-	AddedChannel   chan U
-	RemovedChannel <-chan U
+	SelfOwned      bool
+	AddedChannel   chan<- U
+	RemovedChannel chan<- U
 }
 
 /**
@@ -18,14 +19,15 @@ type FanOutCmd[T any, U any] struct {
  * and fans it out to N output channels.
  */
 type FanOut[T any, U any] struct {
-	Mapper        func(inputs T) U
-	selfOwnIn     bool
-	inputChan     chan T
-	outputChans   []chan U
-	outputFilters []FilterFunc[T]
-	cmdChan       chan FanOutCmd[T, U]
-	wg            sync.WaitGroup
-	isRunning     bool
+	Mapper          func(inputs T) U
+	selfOwnIn       bool
+	inputChan       chan T
+	outputChans     []chan<- U
+	outputSelfOwned []bool
+	outputFilters   []FilterFunc[T]
+	controlChan     chan FanOutCmd[T, U]
+	wg              sync.WaitGroup
+	isRunning       bool
 }
 
 /**
@@ -45,10 +47,10 @@ func NewFanOut[T any, U any](inputChan chan T, mapper func(T) U) *FanOut[T, U] {
 		inputChan = make(chan T)
 	}
 	out := &FanOut[T, U]{
-		cmdChan:   make(chan FanOutCmd[T, U], 1),
-		inputChan: inputChan,
-		selfOwnIn: selfOwnIn,
-		Mapper:    mapper,
+		controlChan: make(chan FanOutCmd[T, U], 1),
+		inputChan:   inputChan,
+		selfOwnIn:   selfOwnIn,
+		Mapper:      mapper,
 	}
 	out.start()
 	return out
@@ -58,7 +60,7 @@ func (fo *FanOut[T, U]) IsRunning() bool {
 	return fo.isRunning
 }
 
-func (fo *FanOut[T, U]) InputChannel() chan<- T {
+func (fo *FanOut[T, U]) SendChan() <-chan T {
 	return fo.inputChan
 }
 
@@ -66,22 +68,27 @@ func (fo *FanOut[T, U]) Send(value T) {
 	fo.inputChan <- value
 }
 
-/**
- * Adds a new fan out receiver with an optional filter method.   The filter method can
- * be used to filter out message to certain listeners if necessary.
- */
-func (fo *FanOut[T, U]) New(filter func(T) bool) <-chan U {
+func (fo *FanOut[T, U]) New(filter func(T) bool) chan U {
 	output := make(chan U, 1)
-	fo.cmdChan <- FanOutCmd[T, U]{Name: "add", AddedChannel: output, Filter: filter}
+	fo.Add(output, filter)
 	return output
 }
 
-func (fo *FanOut[T, U]) Remove(output <-chan U) {
-	fo.cmdChan <- FanOutCmd[T, U]{Name: "remove", RemovedChannel: output}
+/**
+ * Adds a new fan out receiver with an optional filter method.
+ * The filter method can be used to filter out message to certain
+ * listeners if necessary.
+ */
+func (fo *FanOut[T, U]) Add(output chan<- U, filter func(T) bool) {
+	fo.controlChan <- FanOutCmd[T, U]{Name: "add", AddedChannel: output, Filter: filter}
+}
+
+func (fo *FanOut[T, U]) Remove(output chan<- U) {
+	fo.controlChan <- FanOutCmd[T, U]{Name: "remove", RemovedChannel: output}
 }
 
 func (fo *FanOut[T, U]) Stop() {
-	fo.cmdChan <- FanOutCmd[T, U]{Name: "stop"}
+	fo.controlChan <- FanOutCmd[T, U]{Name: "stop"}
 	fo.wg.Wait()
 }
 
@@ -108,20 +115,27 @@ func (fo *FanOut[T, U]) start() {
 					}
 				}
 				break
-			case cmd := <-fo.cmdChan:
+			case cmd := <-fo.controlChan:
 				if cmd.Name == "stop" {
 					return
 				} else if cmd.Name == "add" {
 					// Add a new reader to our list
 					fo.outputChans = append(fo.outputChans, cmd.AddedChannel)
+					fo.outputSelfOwned = append(fo.outputSelfOwned, cmd.SelfOwned)
 					fo.outputFilters = append(fo.outputFilters, cmd.Filter)
 				} else if cmd.Name == "remove" {
 					// Remove an existing reader from our list
 					for index, ch := range fo.outputChans {
 						if ch == cmd.RemovedChannel {
-							close(ch)
+							if fo.outputSelfOwned[index] {
+								close(ch)
+							}
+							fo.outputSelfOwned[index] = fo.outputSelfOwned[len(fo.outputSelfOwned)-1]
+							fo.outputSelfOwned = fo.outputSelfOwned[:len(fo.outputSelfOwned)-1]
+
 							fo.outputChans[index] = fo.outputChans[len(fo.outputChans)-1]
 							fo.outputChans = fo.outputChans[:len(fo.outputChans)-1]
+
 							fo.outputFilters[index] = fo.outputFilters[len(fo.outputFilters)-1]
 							fo.outputFilters = fo.outputFilters[:len(fo.outputFilters)-1]
 							break

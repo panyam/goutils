@@ -61,7 +61,7 @@ func (c *Connector[M]) start() {
 		case <-c.controlChannel:
 			// stopped
 			return
-		case msg := <-connReader.ResultChannel():
+		case msg := <-connReader.RecvChan():
 			if msg.Error != nil || msg.Closed {
 				log.Print("Error reading client message: ", msg.Error)
 				// may have closed so break out of this and go back to

@@ -41,7 +41,7 @@ func (ch *ReaderChan[R]) IsRunning() bool {
 /**
  * Returns the conn's reader channel.
  */
-func (rc *ReaderChan[R]) ResultChannel() chan ValueOrError[R] {
+func (rc *ReaderChan[R]) RecvChan() chan ValueOrError[R] {
 	return rc.msgChannel
 }
 

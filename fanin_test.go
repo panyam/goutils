@@ -26,7 +26,7 @@ func TestFanIn(t *testing.T) {
 	go func() {
 		n := 0
 		for fanin.IsRunning() {
-			i := <-fanin.Channel()
+			i := <-fanin.RecvChan()
 			// log.Println("Received: ", i)
 			vals = append(vals, i)
 			n += 1
