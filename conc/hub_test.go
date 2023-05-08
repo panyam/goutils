@@ -3,6 +3,7 @@ package conc
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"io"
 	"log"
 	"sort"
 	"testing"
@@ -20,7 +21,7 @@ func TestHubWithBroadcaster(t *testing.T) {
 
 	var results []string
 	makewriter := func(name string) HubWriter[Msg] {
-		return func(msg ValueOrError[Msg]) error {
+		return func(msg Message[Msg]) error {
 			msgstr := fmt.Sprintf("%03d - %s - %s", msg.Value.value, msg.Value.topic, name)
 			results = append(results, msgstr)
 			// log.Printf("Received: %s", msgstr)
@@ -36,11 +37,11 @@ func TestHubWithBroadcaster(t *testing.T) {
 
 	callback := make(chan Msg)
 	defer close(callback)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"a", 1}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"b", 2}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"c", 3}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"d", 4}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"e", 5}}, callback)
+	hub.Send(Message[Msg]{Value: Msg{"a", 1}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"b", 2}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"c", 3}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"d", 4}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"e", 5}}, callback)
 	<-callback
 
 	sort.Strings(results)
@@ -66,7 +67,7 @@ func TestHubWithBroadcaster(t *testing.T) {
 	// Now try to remove subscriptions
 	c1.Unsubscribe("a", "c")
 	c2.Subscribe("a")
-	hub.Send(ValueOrError[Msg]{Value: Msg{"a", 6}}, callback)
+	hub.Send(Message[Msg]{Value: Msg{"a", 6}}, callback)
 	<-callback
 	// log.Println("Result after 9 -> a: ", results)
 	sort.Strings(results)
@@ -103,7 +104,7 @@ func TestHubWithKVRouter(t *testing.T) {
 
 	var results []string
 	makewriter := func(name string) HubWriter[Msg] {
-		return func(msg ValueOrError[Msg]) error {
+		return func(msg Message[Msg]) error {
 			msgstr := fmt.Sprintf("%03d - %s - %s", msg.Value.value, msg.Value.topic, name)
 			results = append(results, msgstr)
 			// log.Printf("Received: %s", msgstr)
@@ -119,14 +120,14 @@ func TestHubWithKVRouter(t *testing.T) {
 
 	callback := make(chan Msg)
 	defer close(callback)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"a", 1}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"b", 2}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"c", 3}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"d", 4}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"e", 5}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"f", 6}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"g", 7}}, nil)
-	hub.Send(ValueOrError[Msg]{Value: Msg{"h", 8}}, callback)
+	hub.Send(Message[Msg]{Value: Msg{"a", 1}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"b", 2}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"c", 3}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"d", 4}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"e", 5}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"f", 6}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"g", 7}}, nil)
+	hub.Send(Message[Msg]{Value: Msg{"h", 8}}, callback)
 	<-callback
 
 	sort.Strings(results)
@@ -149,7 +150,7 @@ func TestHubWithKVRouter(t *testing.T) {
 	// Now try to remove subscriptions
 	c1.Unsubscribe("a", "c")
 	c2.Subscribe("a")
-	hub.Send(ValueOrError[Msg]{Value: Msg{"a", 9}}, callback)
+	hub.Send(Message[Msg]{Value: Msg{"a", 9}}, callback)
 	<-callback
 	// log.Println("Result after 9 -> a: ", results)
 	sort.Strings(results)
@@ -178,7 +179,7 @@ func TestHubWithReaders(t *testing.T) {
 
 	var results []string
 	makewriter := func(name string) HubWriter[Msg] {
-		return func(msg ValueOrError[Msg]) error {
+		return func(msg Message[Msg]) error {
 			msgstr := fmt.Sprintf("%03d - %s - %s", msg.Value.value, msg.Value.topic, name)
 			results = append(results, msgstr)
 			// log.Printf("Received: %s", msgstr)
@@ -187,13 +188,13 @@ func TestHubWithReaders(t *testing.T) {
 	}
 	makereader := func(name string, start, end int) HubReader[Msg] {
 		curr := start
-		return func() (msg ValueOrError[Msg]) {
+		return func() (msg Message[Msg]) {
 			if curr <= end {
 				curr += 1
 			} else {
-				return ValueOrError[Msg]{Value: Msg{topic: name, value: end + 1}, Closed: true}
+				return Message[Msg]{Value: Msg{topic: name, value: end + 1}, Error: io.ErrClosedPipe}
 			}
-			return ValueOrError[Msg]{Value: Msg{
+			return Message[Msg]{Value: Msg{
 				topic: name,
 				value: curr - 1,
 			}}

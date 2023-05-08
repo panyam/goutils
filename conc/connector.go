@@ -9,12 +9,12 @@ type Connector[M any] struct {
 	connect func() error
 	read    ReaderFunc[M]
 	// Called when a new message is received
-	OnMessage func(msg ValueOrError[M]) error
+	OnMessage func(msg Message[M]) error
 
 	// Called when the connection is closed and quit (wont be called on reconnects)
 	OnClose func()
 
-	controlChannel chan string
+	controlChan chan string
 }
 
 /**
@@ -28,12 +28,11 @@ func NewConnector[M any](connect func() error, read ReaderFunc[M]) *Connector[M]
 		connect: connect,
 		read:    read,
 	}
-	go conn.start()
 	return conn
 }
 
 func (c *Connector[M]) Stop() {
-	c.controlChannel <- "stop"
+	c.controlChan <- "stop"
 }
 
 func (c *Connector[M]) start() {
@@ -58,11 +57,11 @@ func (c *Connector[M]) start() {
 		case <-ticker.C:
 			// check for a ping
 			break
-		case <-c.controlChannel:
+		case <-c.controlChan:
 			// stopped
 			return
 		case msg := <-connReader.RecvChan():
-			if msg.Error != nil || msg.Closed {
+			if msg.Error != nil {
 				log.Print("Error reading client message: ", msg.Error)
 				// may have closed so break out of this and go back to
 				// our reconnect/backoff/etc logic
