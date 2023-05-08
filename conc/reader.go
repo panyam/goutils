@@ -7,15 +7,15 @@ import (
 
 type ReaderFunc[R any] func() (R, error)
 
-type ReaderChan[R any] struct {
+type Reader[R any] struct {
 	ReaderWriterBase[R]
 	msgChannel chan Message[R]
 	Read       ReaderFunc[R]
 	OnClose    func()
 }
 
-func NewReader[R any](read ReaderFunc[R]) *ReaderChan[R] {
-	out := ReaderChan[R]{
+func NewReader[R any](read ReaderFunc[R]) *Reader[R] {
+	out := Reader[R]{
 		ReaderWriterBase: ReaderWriterBase[R]{
 			WaitTime: 10 * time.Second,
 		},
@@ -25,7 +25,7 @@ func NewReader[R any](read ReaderFunc[R]) *ReaderChan[R] {
 	return &out
 }
 
-func (ch *ReaderChan[T]) cleanup() {
+func (ch *Reader[T]) cleanup() {
 	close(ch.msgChannel)
 	ch.msgChannel = nil
 	ch.ReaderWriterBase.cleanup()
@@ -34,14 +34,14 @@ func (ch *ReaderChan[T]) cleanup() {
 /**
  * Returns whether the connection reader/writer loops are running.
  */
-func (ch *ReaderChan[R]) IsRunning() bool {
+func (ch *Reader[R]) IsRunning() bool {
 	return ch.msgChannel != nil
 }
 
 /**
  * Returns the conn's reader channel.
  */
-func (rc *ReaderChan[R]) RecvChan() chan Message[R] {
+func (rc *Reader[R]) RecvChan() chan Message[R] {
 	return rc.msgChannel
 }
 
@@ -54,7 +54,7 @@ func (rc *ReaderChan[R]) RecvChan() chan Message[R] {
  * to the peer and the (user provided) msgChannel will be used to
  * handle messages from the server.
  */
-func (ch *ReaderChan[T]) Stop() error {
+func (ch *Reader[T]) Stop() error {
 	if !ch.IsRunning() {
 		// already running do nothing
 		return nil
@@ -63,7 +63,7 @@ func (ch *ReaderChan[T]) Stop() error {
 	return nil
 }
 
-func (rc *ReaderChan[R]) start() (err error) {
+func (rc *Reader[R]) start() (err error) {
 	if rc.IsRunning() {
 		return errors.New("Channel already running")
 	}
