@@ -1,11 +1,10 @@
 package conc
 
 type Pipe[T any, U any] struct {
-	OnClose     func(pipe *Pipe[T, U])
+	OnClose     func(p *Pipe[T, U])
 	input       <-chan T
 	output      chan<- U
 	controlChan chan bool
-	notifChan   chan string
 	mapper      func(T) U
 	isRunning   bool
 }
@@ -21,17 +20,12 @@ func NewIDPipe[T any](input <-chan T, output chan<- T, mapper func(T) T) *Pipe[T
 func NewPipe[T any, U any](input <-chan T, output chan<- U, mapper func(T) U) *Pipe[T, U] {
 	out := &Pipe[T, U]{
 		controlChan: make(chan bool),
-		notifChan:   make(chan string),
 		input:       input,
 		output:      output,
 		mapper:      mapper,
 	}
 	out.start()
 	return out
-}
-
-func (p *Pipe[T, U]) NotifChan() <-chan string {
-	return p.notifChan
 }
 
 func (p *Pipe[T, U]) InChan() <-chan T {
@@ -54,13 +48,11 @@ func (p *Pipe[T, U]) start() {
 	p.isRunning = true
 	go func() {
 		defer func() {
-			if p.notifChan != nil {
-				p.notifChan <- "stopped"
+			if p.OnClose != nil {
+				p.OnClose(p)
 			}
 			close(p.controlChan)
-			close(p.notifChan)
 			p.controlChan = nil
-			p.notifChan = nil
 			p.isRunning = false
 		}()
 		for {

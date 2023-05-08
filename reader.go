@@ -9,7 +9,7 @@ type ReaderFunc[R any] func() (R, error)
 
 type ReaderChan[R any] struct {
 	ReaderWriterBase[R]
-	msgChannel chan ValueOrError[R]
+	msgChannel chan Message[R]
 	Read       ReaderFunc[R]
 	OnClose    func()
 }
@@ -41,7 +41,7 @@ func (ch *ReaderChan[R]) IsRunning() bool {
 /**
  * Returns the conn's reader channel.
  */
-func (rc *ReaderChan[R]) RecvChan() chan ValueOrError[R] {
+func (rc *ReaderChan[R]) RecvChan() chan Message[R] {
 	return rc.msgChannel
 }
 
@@ -67,7 +67,7 @@ func (rc *ReaderChan[R]) start() (err error) {
 	if rc.IsRunning() {
 		return errors.New("Channel already running")
 	}
-	rc.msgChannel = make(chan ValueOrError[R])
+	rc.msgChannel = make(chan Message[R])
 	rc.ReaderWriterBase.start()
 	defer func() {
 		if rc.OnClose != nil {
@@ -91,7 +91,7 @@ func (rc *ReaderChan[R]) start() (err error) {
 	// and the actual reader
 	for {
 		newMessage, err := rc.Read()
-		rc.msgChannel <- ValueOrError[R]{
+		rc.msgChannel <- Message[R]{
 			Value: newMessage,
 			Error: err,
 		}

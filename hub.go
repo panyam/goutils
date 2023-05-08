@@ -10,10 +10,10 @@ import (
 type TopicIdType interface{}
 
 // A function that can write to a particular hub
-type HubWriter[M any] func(ValueOrError[M]) error
+type HubWriter[M any] func(Message[M]) error
 
 // A function for reading from a hub
-type HubReader[M any] func() ValueOrError[M]
+type HubReader[M any] func() Message[M]
 
 type HubClient[M any] struct {
 	hub     *Hub[M]
@@ -36,7 +36,7 @@ type HubControlEvent[M any] struct {
 }
 
 type HubMessage[M any] struct {
-	Message  ValueOrError[M]
+	Message  Message[M]
 	Callback chan M
 }
 
@@ -93,7 +93,7 @@ func (h *Hub[M]) Connect(reader HubReader[M], writer HubWriter[M]) (*HubClient[M
 			for {
 				msg := hc.Read()
 				h.Send(msg, nil)
-				if msg.Error != nil || msg.Closed {
+				if msg.Error != nil /* || msg.Closed */ {
 					return
 				}
 			}
@@ -164,7 +164,7 @@ func (h *HubClient[M]) Unsubscribe(topicIds ...TopicIdType) {
 	}
 }
 
-func (s *Hub[M]) Send(message ValueOrError[M], callbackChan chan M) error {
+func (s *Hub[M]) Send(message Message[M], callbackChan chan M) error {
 	s.newMsgChannel <- HubMessage[M]{
 		Message:  message,
 		Callback: callbackChan,

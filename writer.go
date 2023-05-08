@@ -31,7 +31,11 @@ func (ch *WriterChan[T]) cleanup() {
 }
 
 func (wc *WriterChan[W]) SendChan() chan W {
-	return wc.msgChannel
+	if !wc.IsRunning() {
+		return nil
+	} else {
+		return wc.msgChannel
+	}
 }
 
 func (wc *WriterChan[W]) Send(req W) bool {
@@ -60,7 +64,7 @@ func (ch *WriterChan[W]) IsRunning() bool {
  * handle messages from the server.
  */
 func (ch *WriterChan[T]) Stop() error {
-	if !ch.IsRunning() {
+	if !ch.IsRunning() && ch.controlChannel != nil {
 		// already running do nothing
 		return nil
 	}

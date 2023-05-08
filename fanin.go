@@ -72,8 +72,8 @@ func (fi *FanIn[T]) start() {
 			fi.controlChan = nil
 			if fi.selfOwnOut {
 				close(fi.outChan)
-				fi.outChan = nil
 			}
+			fi.outChan = nil
 			fi.isRunning = false
 			fi.wg.Done()
 		}()
