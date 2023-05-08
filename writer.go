@@ -6,15 +6,15 @@ import (
 	"time"
 )
 
-type WriterChan[W any] struct {
+type Writer[W any] struct {
 	ReaderWriterBase[W]
 	msgChannel chan W
 	Write      func(msg W) error
 	OnClose    func()
 }
 
-func NewWriter[W any](write func(msg W) error) *WriterChan[W] {
-	out := WriterChan[W]{
+func NewWriter[W any](write func(msg W) error) *Writer[W] {
+	out := Writer[W]{
 		ReaderWriterBase: ReaderWriterBase[W]{
 			WaitTime: 10 * time.Second,
 		},
@@ -24,13 +24,13 @@ func NewWriter[W any](write func(msg W) error) *WriterChan[W] {
 	return &out
 }
 
-func (ch *WriterChan[T]) cleanup() {
+func (ch *Writer[T]) cleanup() {
 	close(ch.msgChannel)
 	ch.msgChannel = nil
 	ch.ReaderWriterBase.cleanup()
 }
 
-func (wc *WriterChan[W]) SendChan() chan W {
+func (wc *Writer[W]) SendChan() chan W {
 	if !wc.IsRunning() {
 		return nil
 	} else {
@@ -38,7 +38,7 @@ func (wc *WriterChan[W]) SendChan() chan W {
 	}
 }
 
-func (wc *WriterChan[W]) Send(req W) bool {
+func (wc *Writer[W]) Send(req W) bool {
 	if !wc.IsRunning() {
 		log.Println("Connection is not running")
 		return false
@@ -50,7 +50,7 @@ func (wc *WriterChan[W]) Send(req W) bool {
 /**
  * Returns whether the connection reader/writer loops are running.
  */
-func (ch *WriterChan[W]) IsRunning() bool {
+func (ch *Writer[W]) IsRunning() bool {
 	return ch.msgChannel != nil
 }
 
@@ -63,7 +63,7 @@ func (ch *WriterChan[W]) IsRunning() bool {
  * to the peer and the (user provided) msgChannel will be used to
  * handle messages from the server.
  */
-func (ch *WriterChan[T]) Stop() error {
+func (ch *Writer[T]) Stop() error {
 	if !ch.IsRunning() && ch.controlChannel != nil {
 		// already running do nothing
 		return nil
@@ -73,7 +73,7 @@ func (ch *WriterChan[T]) Stop() error {
 }
 
 // Start writer goroutine
-func (wc *WriterChan[W]) start() (err error) {
+func (wc *Writer[W]) start() (err error) {
 	if wc.IsRunning() {
 		return errors.New("Channel already running")
 	}

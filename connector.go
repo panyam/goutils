@@ -35,7 +35,7 @@ func (c *Connector[M]) Stop() {
 	c.controlChan <- "stop"
 }
 
-func (c *Connector[M]) start() {
+func (c *Connector[M]) Start() {
 	// connect first
 	connReader := NewReader(c.read)
 	ticker := time.NewTicker(time.Second * 10)
