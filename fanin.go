@@ -11,7 +11,11 @@ type FanInCmd[T any] struct {
 }
 
 type FanIn[T any] struct {
-	inChans     []chan T
+	// Called when a channel is removed so the caller can
+	// perform other cleanups etc based on this
+	OnChannelRemoved func(fi *FanIn[T], inchan <-chan T)
+
+	inChans     []<-chan T
 	pipes       []*Pipe[T, T]
 	selfOwnOut  bool
 	outChan     chan T
@@ -113,6 +117,9 @@ func (fi *FanIn[T]) remove(inchan <-chan T) {
 			fi.inChans[index] = fi.inChans[len(fi.inChans)-1]
 			fi.inChans = fi.inChans[:len(fi.inChans)-1]
 			fi.wg.Done()
+			if fi.OnChannelRemoved != nil {
+				fi.OnChannelRemoved(fi, inchan)
+			}
 			break
 		}
 	}
