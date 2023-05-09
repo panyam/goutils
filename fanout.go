@@ -1,6 +1,7 @@
 package conc
 
 import (
+	"log"
 	"sync"
 )
 
@@ -19,7 +20,8 @@ type FanOutCmd[T any, U any] struct {
  * and fans it out to N output channels.
  */
 type FanOut[T any, U any] struct {
-	Mapper          func(inputs T) U
+	Mapper func(inputs T) U
+
 	selfOwnIn       bool
 	inputChan       chan T
 	outputChans     []chan<- U
@@ -41,6 +43,9 @@ func NewIDFanOut[T any](input chan T, mapper func(T) T) *FanOut[T, T] {
 }
 
 func NewFanOut[T any, U any](inputChan chan T, mapper func(T) U) *FanOut[T, U] {
+	if mapper == nil {
+		log.Panic("Mapper MUST be provided to convert between T and U")
+	}
 	selfOwnIn := false
 	if inputChan == nil {
 		selfOwnIn = true
@@ -54,6 +59,10 @@ func NewFanOut[T any, U any](inputChan chan T, mapper func(T) U) *FanOut[T, U] {
 	}
 	out.start()
 	return out
+}
+
+func (fo *FanOut[T, U]) Count() int {
+	return len(fo.outputChans)
 }
 
 func (fo *FanOut[T, U]) IsRunning() bool {

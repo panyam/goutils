@@ -2,6 +2,7 @@ package conc
 
 import (
 	"errors"
+	"log"
 	"time"
 )
 
@@ -35,13 +36,13 @@ func (ch *Reader[T]) cleanup() {
  * Returns whether the connection reader/writer loops are running.
  */
 func (ch *Reader[R]) IsRunning() bool {
-	return ch.msgChannel != nil
+	return ch != nil && ch.msgChannel != nil
 }
 
 /**
  * Returns the conn's reader channel.
  */
-func (rc *Reader[R]) RecvChan() chan Message[R] {
+func (rc *Reader[R]) RecvChan() <-chan Message[R] {
 	return rc.msgChannel
 }
 
@@ -55,7 +56,7 @@ func (rc *Reader[R]) RecvChan() chan Message[R] {
  * handle messages from the server.
  */
 func (ch *Reader[T]) Stop() error {
-	if !ch.IsRunning() {
+	if ch == nil || !ch.IsRunning() {
 		// already running do nothing
 		return nil
 	}
@@ -67,6 +68,7 @@ func (rc *Reader[R]) start() (err error) {
 	if rc.IsRunning() {
 		return errors.New("Channel already running")
 	}
+	log.Println("Starting reader....")
 	rc.msgChannel = make(chan Message[R])
 	rc.ReaderWriterBase.start()
 	defer func() {

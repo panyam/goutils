@@ -79,7 +79,6 @@ func (wc *Writer[W]) start() (err error) {
 	}
 	wc.msgChannel = make(chan W)
 	wc.ReaderWriterBase.start()
-	log.Println("Starting writer: ")
 	go func() {
 		ticker := time.NewTicker((wc.WaitTime * 9) / 10)
 		defer func() {

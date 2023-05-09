@@ -15,7 +15,6 @@ type FanIn[T any] struct {
 	// perform other cleanups etc based on this
 	OnChannelRemoved func(fi *FanIn[T], inchan <-chan T)
 
-	inChans     []<-chan T
 	pipes       []*Pipe[T, T]
 	selfOwnOut  bool
 	outChan     chan T
@@ -65,6 +64,10 @@ func (fi *FanIn[T]) Stop() {
 	fi.wg.Wait()
 }
 
+func (fi *FanIn[T]) Count() int {
+	return len(fi.pipes)
+}
+
 func (fi *FanIn[T]) start() {
 	fi.wg.Add(1)
 	fi.isRunning = true
@@ -72,7 +75,6 @@ func (fi *FanIn[T]) start() {
 		defer func() {
 			close(fi.controlChan)
 			fi.pipes = nil
-			fi.inChans = nil
 			fi.controlChan = nil
 			if fi.selfOwnOut {
 				close(fi.outChan)
@@ -109,13 +111,11 @@ func (fi *FanIn[T]) pipeClosed(p *Pipe[T, T]) {
 }
 
 func (fi *FanIn[T]) remove(inchan <-chan T) {
-	for index, ch := range fi.inChans {
-		if ch == inchan {
+	for index, pipe := range fi.pipes {
+		if pipe.InChan() == inchan {
 			fi.pipes[index].Stop()
 			fi.pipes[index] = fi.pipes[len(fi.pipes)-1]
 			fi.pipes = fi.pipes[:len(fi.pipes)-1]
-			fi.inChans[index] = fi.inChans[len(fi.inChans)-1]
-			fi.inChans = fi.inChans[:len(fi.inChans)-1]
 			fi.wg.Done()
 			if fi.OnChannelRemoved != nil {
 				fi.OnChannelRemoved(fi, inchan)
