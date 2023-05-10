@@ -27,7 +27,6 @@ func TestFanIn(t *testing.T) {
 		n := 0
 		for fanin.IsRunning() {
 			i := <-fanin.RecvChan()
-			// log.Println("Received: ", i)
 			vals = append(vals, i)
 			n += 1
 			if n >= 15 {
@@ -45,7 +44,6 @@ func TestFanIn(t *testing.T) {
 			inch[ch] <- v
 		}
 	}
-	// log.Println("Waiting to finish...")
 	wg.Wait()
 
 	// Sort since fanin can combine in any order
@@ -75,7 +73,6 @@ func TestMultiReadFanInToFanOut(t *testing.T) {
 	var m sync.Mutex
 	resch := make(chan int)
 	writer := NewWriter(func(val int) error {
-		log.Println("Here....", val)
 		m.Lock()
 		results = append(results, val)
 		m.Unlock()
@@ -108,4 +105,65 @@ func TestMultiReadFanInToFanOut(t *testing.T) {
 	assert.Equal(t, len(results), 5)
 	fanin.Stop()
 	fanout.Stop()
+}
+
+func TestMultiReadFanInFromReaders(t *testing.T) {
+	log.Println("===================== TestMultiReadFanInFromReaders =====================")
+	makereader := func(ch chan int) *Reader[int] {
+		return NewReader(func() (int, error) {
+			val := <-ch
+			return val, nil
+		})
+	}
+	NUM_CHANS := 1
+	var inch []chan int
+	var readers []*Reader[int]
+	for i := 0; i < NUM_CHANS; i++ {
+		inch = append(inch, make(chan int))
+		readers = append(readers, makereader(inch[i]))
+	}
+
+	fanin := NewFanIn[Message[int]](nil)
+	for _, r := range readers {
+		fanin.Add(r.RecvChan())
+	}
+
+	var results []bool
+	for i := 0; i < NUM_CHANS; i++ {
+		results = append(results, false)
+	}
+	var m sync.Mutex
+	resch := make(chan int, NUM_CHANS)
+	writer := NewWriter(func(val int) error {
+		m.Lock()
+		results[val] = true
+		m.Unlock()
+		resch <- val
+		return nil
+	})
+
+	go func() {
+		for {
+			select {
+			case val, _ := <-fanin.RecvChan():
+				writer.Send(val.Value)
+				break
+			}
+		}
+	}()
+
+	for i := 0; i < NUM_CHANS; i++ {
+		inch[i] <- i
+	}
+	for i := 0; i < NUM_CHANS; i++ {
+		<-resch
+	}
+
+	// log.Println("Results: ", results)
+	assert.Equal(t, len(results), NUM_CHANS)
+	for i := 0; i < NUM_CHANS; i++ {
+		assert.Equal(t, true, results[i])
+	}
+	fanin.Stop()
+	writer.Stop()
 }
