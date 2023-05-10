@@ -1,42 +1,31 @@
 package conc
 
-import (
-	"errors"
-	"log"
-	"time"
-)
-
 type ReaderFunc[R any] func() (R, error)
 
 type Reader[R any] struct {
-	ReaderWriterBase[R]
+	RunnerBase[string]
 	msgChannel chan Message[R]
 	Read       ReaderFunc[R]
-	OnClose    func()
+	OnDone     func(r *Reader[R])
 }
 
 func NewReader[R any](read ReaderFunc[R]) *Reader[R] {
 	out := Reader[R]{
-		ReaderWriterBase: ReaderWriterBase[R]{
-			WaitTime: 10 * time.Second,
-		},
-		Read: read,
+		RunnerBase: NewRunnerBase("stop"),
+		Read:       read,
+		msgChannel: make(chan Message[R]),
 	}
-	go out.start()
+	out.start()
 	return &out
 }
 
-func (ch *Reader[T]) cleanup() {
-	close(ch.msgChannel)
-	ch.msgChannel = nil
-	ch.ReaderWriterBase.cleanup()
-}
-
-/**
- * Returns whether the connection reader/writer loops are running.
- */
-func (ch *Reader[R]) IsRunning() bool {
-	return ch != nil && ch.msgChannel != nil
+func (r *Reader[T]) cleanup() {
+	if r.OnDone != nil {
+		r.OnDone(r)
+	}
+	close(r.msgChannel)
+	r.msgChannel = nil
+	r.RunnerBase.cleanup()
 }
 
 /**
@@ -46,60 +35,30 @@ func (rc *Reader[R]) RecvChan() <-chan Message[R] {
 	return rc.msgChannel
 }
 
-/**
- * This method is called to stop the channel
- * If already connected then nothing is done and nil
- * is not already connected, a connection will first be established
- * (including auth and refreshing tokens) and then the reader and
- * writers are started.   SendRequest can be called to send requests
- * to the peer and the (user provided) msgChannel will be used to
- * handle messages from the server.
- */
-func (ch *Reader[T]) Stop() error {
-	if ch == nil || !ch.IsRunning() {
-		// already running do nothing
-		return nil
-	}
-	ch.controlChannel <- "stop"
-	return nil
-}
-
-func (rc *Reader[R]) start() (err error) {
-	if rc.IsRunning() {
-		return errors.New("Channel already running")
-	}
-	log.Println("Starting reader....")
-	rc.msgChannel = make(chan Message[R])
-	rc.ReaderWriterBase.start()
-	defer func() {
-		if rc.OnClose != nil {
-			rc.OnClose()
-		}
-	}()
+func (rc *Reader[R]) start() {
+	rc.RunnerBase.start()
 	go func() {
-		ticker := time.NewTicker((rc.WaitTime * 9) / 10)
-		defer rc.ReaderWriterBase.cleanup()
+		defer rc.cleanup()
+		go func() {
+			for {
+				newMessage, err := rc.Read()
+				rc.msgChannel <- Message[R]{
+					Value: newMessage,
+					Error: err,
+				}
+				if err != nil {
+					break
+				}
+			}
+		}()
+
+		// and the actual reader
 		for {
 			select {
-			case <-rc.controlChannel:
+			case <-rc.controlChan:
 				// For now only a "kill" can be sent here
 				return
-			case <-ticker.C:
-				// TODO - use to send pings
 			}
 		}
 	}()
-
-	// and the actual reader
-	for {
-		newMessage, err := rc.Read()
-		rc.msgChannel <- Message[R]{
-			Value: newMessage,
-			Error: err,
-		}
-		if err != nil {
-			break
-		}
-	}
-	return nil
 }

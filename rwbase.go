@@ -1,32 +1,59 @@
 package conc
 
 import (
+	"errors"
 	"sync"
-	"time"
 )
 
-type ReaderWriterBase[T any] struct {
-	// Time allowed to read the next pong message from the peer.
-	WaitTime       time.Duration
-	controlChannel chan string
-	wg             sync.WaitGroup
+type RunnerBase[C any] struct {
+	controlChan chan C
+	isRunning   bool
+	wg          sync.WaitGroup
+	stopVal     C
+}
+
+func NewRunnerBase[C any](stopVal C) RunnerBase[C] {
+	return RunnerBase[C]{
+		controlChan: make(chan C, 1),
+		stopVal:     stopVal,
+	}
+}
+
+func (r *RunnerBase[C]) IsRunning() bool {
+	return r.isRunning
 }
 
 /**
- * Waits until the socket connection is disconnected or manually stopped.
+ * This method is intentionally private.  It is to be inherited by child
+ * types and then called after their initialization is done.
  */
-func (rwb *ReaderWriterBase[T]) WaitForFinish() {
-	rwb.wg.Wait()
-}
-
-func (rwb *ReaderWriterBase[T]) start() error {
-	rwb.controlChannel = make(chan string, 1)
-	rwb.wg.Add(1)
+func (r *RunnerBase[C]) start() error {
+	if r.IsRunning() {
+		return errors.New("Channel already running")
+	}
+	r.isRunning = true
+	r.wg.Add(1)
 	return nil
 }
 
-func (rwb *ReaderWriterBase[T]) cleanup() {
-	close(rwb.controlChannel)
-	rwb.controlChannel = nil
-	rwb.wg.Done()
+/**
+ * This method is called to stop the runner.  It is upto the child classes
+ * to listen to messages on the control channel and initiate the wind-down
+ * and cleanup process.
+ */
+func (r *RunnerBase[C]) Stop() error {
+	if !r.IsRunning() && r.controlChan != nil {
+		// already running do nothing
+		return nil
+	}
+	r.controlChan <- r.stopVal
+	r.isRunning = false
+	r.wg.Wait()
+	return nil
+}
+
+func (r *RunnerBase[C]) cleanup() {
+	close(r.controlChan)
+	r.controlChan = nil
+	r.wg.Done()
 }

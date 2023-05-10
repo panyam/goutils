@@ -210,8 +210,6 @@ func TestHubWithReaders(t *testing.T) {
 	hub.Connect(makereader("r1", 1, 5), nil)
 	hub.Connect(makereader("r2", 10, 15), nil)
 	// log.Println("Result after 8 -> h: ", results)
-
-	log.Println("results: ", results)
 	// hub.Stop()
 
 	time.Sleep(time.Second * 1)

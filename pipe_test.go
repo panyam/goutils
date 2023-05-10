@@ -11,7 +11,7 @@ func TestPipe(t *testing.T) {
 	log.Println("============== TestPipe ================")
 	inch := make(chan int)
 	outch := make(chan int)
-	pipe := NewPipe(inch, outch, func(x int) int { return x * 2 })
+	pipe := NewPipe(inch, outch)
 	maxNums := 6
 	var vals []int
 	var wg sync.WaitGroup
@@ -23,6 +23,7 @@ func TestPipe(t *testing.T) {
 			inch <- i
 		}
 		pipe.Stop()
+		close(inch)
 		wg.Done()
 	}()
 
@@ -34,6 +35,36 @@ func TestPipe(t *testing.T) {
 	wg.Wait()
 
 	for i := 0; i < maxNums; i++ {
-		assert.Equal(t, vals[i], i*2, "Out vals dont match")
+		assert.Equal(t, vals[i], i, "Out vals dont match")
+	}
+}
+
+func TestReader2Pipe(t *testing.T) {
+	log.Println("============== TestReader2Pipe ================")
+	inch := make(chan int)
+	outch := make(chan Message[int])
+	makereader := func(ch chan int) *Reader[int] {
+		return NewReader(func() (int, error) {
+			val := <-ch
+			return val, nil
+		})
+	}
+	reader := makereader(inch)
+	pipe := NewPipe(reader.RecvChan(), outch)
+	defer pipe.Stop()
+
+	var results []bool
+	for i := 0; i < 5; i++ {
+		results = append(results, false)
+	}
+	go func() {
+		for {
+			msg, _ := <-outch
+			results[msg.Value] = true
+		}
+	}()
+
+	for i := 0; i < 5; i++ {
+		inch <- i
 	}
 }

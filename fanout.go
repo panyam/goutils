@@ -2,7 +2,6 @@ package conc
 
 import (
 	"log"
-	"sync"
 )
 
 type FilterFunc[T any] func(T) bool
@@ -20,6 +19,7 @@ type FanOutCmd[T any, U any] struct {
  * and fans it out to N output channels.
  */
 type FanOut[T any, U any] struct {
+	RunnerBase[FanOutCmd[T, U]]
 	Mapper func(inputs T) U
 
 	selfOwnIn       bool
@@ -27,9 +27,6 @@ type FanOut[T any, U any] struct {
 	outputChans     []chan<- U
 	outputSelfOwned []bool
 	outputFilters   []FilterFunc[T]
-	controlChan     chan FanOutCmd[T, U]
-	wg              sync.WaitGroup
-	isRunning       bool
 }
 
 /**
@@ -39,7 +36,7 @@ func NewIDFanOut[T any](input chan T, mapper func(T) T) *FanOut[T, T] {
 	if mapper == nil {
 		mapper = IDFunc[T]
 	}
-	return NewFanOut[T, T](input, mapper)
+	return NewFanOut(input, mapper)
 }
 
 func NewFanOut[T any, U any](inputChan chan T, mapper func(T) U) *FanOut[T, U] {
@@ -52,10 +49,10 @@ func NewFanOut[T any, U any](inputChan chan T, mapper func(T) U) *FanOut[T, U] {
 		inputChan = make(chan T)
 	}
 	out := &FanOut[T, U]{
-		controlChan: make(chan FanOutCmd[T, U], 1),
-		inputChan:   inputChan,
-		selfOwnIn:   selfOwnIn,
-		Mapper:      mapper,
+		RunnerBase: NewRunnerBase(FanOutCmd[T, U]{Name: "stop"}),
+		inputChan:  inputChan,
+		selfOwnIn:  selfOwnIn,
+		Mapper:     mapper,
 	}
 	out.start()
 	return out
@@ -63,10 +60,6 @@ func NewFanOut[T any, U any](inputChan chan T, mapper func(T) U) *FanOut[T, U] {
 
 func (fo *FanOut[T, U]) Count() int {
 	return len(fo.outputChans)
-}
-
-func (fo *FanOut[T, U]) IsRunning() bool {
-	return fo.isRunning
 }
 
 func (fo *FanOut[T, U]) SendChan() <-chan T {
@@ -96,24 +89,21 @@ func (fo *FanOut[T, U]) Remove(output chan<- U) {
 	fo.controlChan <- FanOutCmd[T, U]{Name: "remove", RemovedChannel: output}
 }
 
-func (fo *FanOut[T, U]) Stop() {
-	fo.controlChan <- FanOutCmd[T, U]{Name: "stop"}
-	fo.wg.Wait()
+func (fo *FanOut[T, U]) cleanup() {
+	if fo.selfOwnIn {
+		close(fo.inputChan)
+	}
+	fo.inputChan = nil
+	fo.RunnerBase.cleanup()
 }
 
 func (fo *FanOut[T, U]) start() {
-	fo.wg.Add(1)
-	fo.isRunning = true
+	fo.RunnerBase.start()
+
 	go func() {
+		defer fo.cleanup()
+
 		// keep reading from input and send to outputs
-		defer func() {
-			if fo.selfOwnIn {
-				close(fo.inputChan)
-				fo.inputChan = nil
-			}
-			fo.isRunning = false
-			fo.wg.Done()
-		}()
 		for {
 			select {
 			case event := <-fo.inputChan:
