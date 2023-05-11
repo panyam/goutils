@@ -1,4 +1,4 @@
-package reflect
+package utils
 
 import (
 	"github.com/stretchr/testify/assert"
@@ -7,8 +7,7 @@ import (
 )
 
 func Test1(t *testing.T) {
-	a := make(map[string]interface{})
-	err := SetMapFields(a,
+	a, err := SetMapFields(nil,
 		"a/b", 3,
 		"a/c/d/e", "hello world",
 		"a/c/f", []string{"hello", "universe"},
@@ -52,9 +51,7 @@ func Test1(t *testing.T) {
 }
 
 func TestCopyFields(t *testing.T) {
-	a := make(map[string]interface{})
-	b := make(map[string]interface{})
-	err := SetMapFields(a,
+	a, err := SetMapFields(nil,
 		"a/b", 3,
 		"a/c/d/e", "hello world",
 		"a/c/d", []string{"hello", "universe"},
@@ -74,7 +71,7 @@ func TestCopyFields(t *testing.T) {
 	})
 
 	// now copy to b
-	err = CopyMapFields(a, b, "a/c/d", "x/y", "a/b", "l/m/n/o")
+	b, err := CopyMapFields(a, nil, "a/c/d", "x/y", "a/b", "l/m/n/o")
 	assert.Equal(t, err, nil)
 	assert.Equal(t, b, map[string]interface{}{
 		"l": map[string]interface{}{
@@ -94,8 +91,7 @@ func TestCopyFields(t *testing.T) {
 }
 
 func TestReplace(t *testing.T) {
-	a := make(map[string]interface{})
-	err := SetMapFields(a,
+	a, err := SetMapFields(nil,
 		"a/b", 3,
 		"a/c/d/e", "hello world",
 		"a/c/d", []string{"hello", "universe"},
@@ -116,8 +112,7 @@ func TestReplace(t *testing.T) {
 }
 
 func TestFailure(t *testing.T) {
-	a := make(map[string]interface{})
-	err := SetMapFields(a,
+	a, err := SetMapFields(nil,
 		"a/b", 3,
 		"a/b/c", "hello world",
 	)
