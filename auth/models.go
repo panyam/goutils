@@ -111,8 +111,8 @@ func (af *AuthFlow) HasKey() bool {
 
 /**
  * Channel's represented federated verification objects.  For example a Google
- * Signin would ensure that the user that goes through this flow will end up with
- * a Google signin Channel - which would verify a particular identity type.
+ * Signin would ensure that the user that goes through this flow will end up
+ * with a Google signin Channel - which would verify a particular identity type.
  */
 type Channel struct {
 	dal.BaseEntity

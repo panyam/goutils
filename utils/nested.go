@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-type StringMap = map[string]interface{}
-
 func GetMapField(input StringMap, fieldPath interface{}) (interface{}, error) {
 	curr := input
 	var field_names []string

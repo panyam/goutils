@@ -4,6 +4,15 @@ import (
 	"sync"
 )
 
+func IndexOf[T any](items []T, matchfunc func(T) bool) int {
+	for index, item := range items {
+		if matchfunc(item) {
+			return index
+		}
+	}
+	return -1
+}
+
 func Map[T any, U any](items []T, mapfunc func(T) U) (out []U) {
 	for _, item := range items {
 		out = append(out, mapfunc(item))
