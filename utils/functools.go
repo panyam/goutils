@@ -48,3 +48,19 @@ func BatchGet[T any](ids []string, reqMaker func(string) (T, error)) (out map[st
 	wg.Wait()
 	return
 }
+
+func MapKeys[K any](input map[interface{}]any) []K {
+	var out []K
+	for k := range input {
+		out = append(out, k.(K))
+	}
+	return out
+}
+
+func MapValues[V any](input map[interface{}]any) []V {
+	var out []V
+	for _, v := range input {
+		out = append(out, v.(V))
+	}
+	return out
+}
