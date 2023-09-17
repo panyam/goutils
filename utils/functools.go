@@ -49,18 +49,18 @@ func BatchGet[T any](ids []string, reqMaker func(string) (T, error)) (out map[st
 	return
 }
 
-func MapKeys[K any](input map[interface{}]any) []K {
-	var out []K
+func MapKeys[K comparable, V any](input map[K]V) []K {
+	out := make([]K, 0, len(input))
 	for k := range input {
-		out = append(out, k.(K))
+		out = append(out, k)
 	}
 	return out
 }
 
-func MapValues[V any](input map[interface{}]any) []V {
-	var out []V
+func MapValues[V any, K comparable](input map[K]V) []V {
+	out := make([]V, 0, len(input))
 	for _, v := range input {
-		out = append(out, v.(V))
+		out = append(out, v)
 	}
 	return out
 }
