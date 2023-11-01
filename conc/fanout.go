@@ -119,6 +119,7 @@ func (fo *FanOut[T, U]) start() {
 					return
 				} else if cmd.Name == "add" {
 					// Add a new reader to our list
+					// check for dup?
 					fo.outputChans = append(fo.outputChans, cmd.AddedChannel)
 					fo.outputSelfOwned = append(fo.outputSelfOwned, cmd.SelfOwned)
 					fo.outputFilters = append(fo.outputFilters, cmd.Filter)
