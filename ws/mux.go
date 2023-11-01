@@ -51,7 +51,20 @@ func (w *WSMux) SetForTopic(topicId string, client *WSClient) error {
 	w.connsLock.Lock()
 	defer w.connsLock.Unlock()
 
-	w.allClients[client] = map[string]bool{topicId: true}
+	found := false
+	// go through all existing clients and if that existing client
+	// is registered to receive on this topic then remove its subscription
+	// (unless it is us)
+	for existing, _ := range w.allClients {
+		if client != existing {
+			if fanout, ok := w.clientsByTopic[topicId]; ok && fanout != nil {
+				fanout.Remove(existing.writer.SendChan())
+			}
+		}
+	}
+	if !found {
+		w.addToTopic(topicId, client)
+	}
 	return nil
 }
 
