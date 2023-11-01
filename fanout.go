@@ -120,9 +120,23 @@ func (fo *FanOut[T, U]) start() {
 				} else if cmd.Name == "add" {
 					// Add a new reader to our list
 					// check for dup?
-					fo.outputChans = append(fo.outputChans, cmd.AddedChannel)
-					fo.outputSelfOwned = append(fo.outputSelfOwned, cmd.SelfOwned)
-					fo.outputFilters = append(fo.outputFilters, cmd.Filter)
+					found := false
+					if fo.outputChans != nil {
+						// all good
+						for _, oc := range fo.outputChans {
+							if oc == cmd.AddedChannel {
+								found = true
+								// Or should we replace this?
+								log.Println("Output Channel already exists.  Will skip.  Remove it first if you want to add again or change filter funcs")
+								break
+							}
+						}
+					}
+					if !found {
+						fo.outputChans = append(fo.outputChans, cmd.AddedChannel)
+						fo.outputSelfOwned = append(fo.outputSelfOwned, cmd.SelfOwned)
+						fo.outputFilters = append(fo.outputFilters, cmd.Filter)
+					}
 				} else if cmd.Name == "remove" {
 					// Remove an existing reader from our list
 					for index, ch := range fo.outputChans {
