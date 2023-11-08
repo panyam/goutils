@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func SendJsonResponse(writer http.ResponseWriter, resp gut.StringMap, err error) {
+func SendJsonResponse(writer http.ResponseWriter, resp interface{}, err error) {
 	output := resp
 	httpCode := ErrorToHttpCode(err)
 	if err != nil {
@@ -80,7 +80,7 @@ func WSConnWriteError(wsConn *websocket.Conn, err error) error {
 	return nil
 }
 
-func WSConnWriteMessage(wsConn *websocket.Conn, msg gut.StringMap) error {
+func WSConnWriteMessage(wsConn *websocket.Conn, msg interface{}) error {
 	jsonResp, err := json.Marshal(msg)
 	if err != nil {
 		log.Println("Error happened in JSON marshal. Err: ", err)

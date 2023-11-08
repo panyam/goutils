@@ -10,10 +10,9 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/panyam/goutils/conc"
-	gut "github.com/panyam/goutils/utils"
 )
 
-type WSMsgType gut.StringMap
+type WSMsgType interface{}
 type WSFanOut = conc.FanOut[conc.Message[WSMsgType], conc.Message[WSMsgType]]
 
 type WSMux struct {
@@ -127,8 +126,6 @@ func (w *WSMux) Subscribe(req *http.Request, writer http.ResponseWriter) (*WSCli
 		SendJsonResponse(writer, nil, err)
 		return nil, err
 	}
-	defer log.Println("Closing WS connection from Agent FE")
-	defer wsConn.Close()
 	out := WSClient{
 		PingPeriod: 10 * time.Second,
 		PongPeriod: 60 * time.Second,
@@ -170,7 +167,6 @@ func (w *WSClient) Start() error {
 	w.stopChan = make(chan bool)
 	defer pingChecker.Stop()
 	defer w.cleanup()
-	defer log.Println("Client exiting....")
 
 	w.wsConn.SetReadDeadline(time.Now().Add(w.PongPeriod))
 
@@ -190,8 +186,10 @@ func (w *WSClient) Start() error {
 			lastPingedAt = time.Now()
 			w.wsConn.SetReadDeadline(time.Now().Add(w.PongPeriod))
 			if result.Error != nil {
-				log.Println("WebSocket Error: ", result.Error)
-				return result.Error
+				if result.Error != io.EOF {
+					log.Println("WebSocket Error: ", result.Error, io.EOF)
+					return result.Error
+				}
 			} else {
 				// we have an actual message being sent on this channel - typically
 				// dont need to do anything as we are using these for outbound connections
@@ -216,6 +214,7 @@ func (w *WSClient) cleanup() {
 	defer w.wsMux.RemoveClient(w)
 	w.reader.Stop()
 	w.writer.Stop()
+	w.wsConn.Close()
 	close(w.stopChan)
 	defer log.Println("Finished cleaning up client.")
 }

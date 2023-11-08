@@ -1,5 +1,7 @@
 package conc
 
+import "log"
+
 type FanInCmd[T any] struct {
 	Name           string
 	AddedChannel   <-chan T
@@ -93,6 +95,7 @@ func (fi *FanIn[T]) start() {
 				input.pipe.OnDone = fi.pipeClosed
 			} else if cmd.Name == "remove" {
 				// Remove an existing reader from our list
+				log.Println("Removing channel: ", cmd.RemovedChannel)
 				fi.remove(cmd.RemovedChannel)
 			}
 		}
