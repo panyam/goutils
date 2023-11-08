@@ -196,7 +196,9 @@ func (w *WSClient) Start() error {
 				// only to write to a listening agent FE so can just log and drop any
 				// thing sent by agent FE here - this can change later
 				log.Println("Received message from client: ", result.Value)
-				w.wsMux.HandleClientMessage(w.wsMux, result.Value)
+				if w.wsMux.HandleClientMessage != nil {
+					w.wsMux.HandleClientMessage(w.wsMux, result.Value)
+				}
 			}
 			break
 		}
