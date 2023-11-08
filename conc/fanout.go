@@ -94,6 +94,15 @@ func (fo *FanOut[T, U]) cleanup() {
 		close(fo.inputChan)
 	}
 	fo.inputChan = nil
+	// close any output channels *we* own
+	for index, ch := range fo.outputChans {
+		if fo.outputSelfOwned[index] && ch != nil {
+			close(ch)
+		}
+	}
+	fo.outputChans = nil
+	fo.outputFilters = nil
+	fo.outputSelfOwned = nil
 	fo.RunnerBase.cleanup()
 }
 
@@ -108,9 +117,11 @@ func (fo *FanOut[T, U]) start() {
 			select {
 			case event := <-fo.inputChan:
 				result := fo.Mapper(event)
-				for index, outputChan := range fo.outputChans {
-					if fo.outputFilters[index] == nil || fo.outputFilters[index](event) {
-						outputChan <- result
+				if fo.outputChans != nil {
+					for index, outputChan := range fo.outputChans {
+						if outputChan != nil && fo.outputFilters[index] == nil || fo.outputFilters[index](event) {
+							outputChan <- result
+						}
 					}
 				}
 				break
