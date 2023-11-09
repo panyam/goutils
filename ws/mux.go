@@ -166,8 +166,8 @@ type WSClient struct {
 
 func (w *WSClient) Start() error {
 	w.LastReadAt = time.Now()
-	pingTimer := time.NewTicker(time.Second * w.PingPeriod)
-	pongChecker := time.NewTicker(time.Second * w.PongPeriod)
+	pingTimer := time.NewTicker(w.PingPeriod)
+	pongChecker := time.NewTicker(w.PongPeriod)
 	w.stopChan = make(chan bool)
 	defer pongChecker.Stop()
 	defer w.cleanup()
