@@ -183,7 +183,7 @@ func (w *WSClient) Start() error {
 			if w.Pinger != nil {
 				if pingmsg, err := w.Pinger(w); err != nil {
 					log.Println("Ping failed: ", err)
-				} else {
+				} else if pingmsg != nil {
 					w.Send(pingmsg)
 				}
 			}
