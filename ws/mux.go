@@ -159,7 +159,7 @@ type WSClient struct {
 	reader     *conc.Reader[WSMsgType]
 	writer     *conc.Writer[conc.Message[WSMsgType]]
 	stopChan   chan bool
-	Pinger     func() error
+	Pinger     func(*WSClient) error
 	LastReadAt time.Time
 }
 
@@ -180,7 +180,7 @@ func (w *WSClient) Start() error {
 			return nil
 		case <-pingTimer.C:
 			if w.Pinger != nil {
-				if err := w.Pinger(); err != nil {
+				if err := w.Pinger(w); err != nil {
 					log.Println("Ping failed: ", err)
 				}
 			}
@@ -219,6 +219,10 @@ func (w *WSClient) Stop() {
 	defer log.Println("Client stop issued...")
 	w.stopChan <- true
 	defer log.Println("Client accepted issued.")
+}
+
+func (w *WSClient) Write(msg WSMsgType) {
+	w.writer.Send(conc.Message[WSMsgType]{Value: msg})
 }
 
 func (w *WSClient) cleanup() {
