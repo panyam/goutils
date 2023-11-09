@@ -231,11 +231,11 @@ func (w *WSClient) Send(msg WSMsgType) {
 }
 
 func (w *WSClient) cleanup() {
-	defer log.Println("Cleaning up client....")
+	log.Println("Cleaning up client....")
 	defer w.wsMux.RemoveClient(w)
+	defer log.Println("Finished cleaning up client.")
 	w.reader.Stop()
 	w.writer.Stop()
 	w.wsConn.Close()
 	close(w.stopChan)
-	defer log.Println("Finished cleaning up client.")
 }
