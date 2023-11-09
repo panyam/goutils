@@ -110,7 +110,7 @@ func (w *WSMux) removeFromTopic(topicId string, client *WSClient) error {
 }
 
 func (w *WSMux) removeClient(client *WSClient) error {
-	for topicId, _ := range w.allClients[client] {
+	for topicId := range w.allClients[client] {
 		w.removeFromTopic(topicId, client)
 	}
 	return nil
@@ -159,13 +159,16 @@ type WSClient struct {
 	reader     *conc.Reader[WSMsgType]
 	writer     *conc.Writer[conc.Message[WSMsgType]]
 	stopChan   chan bool
+	Pinger     func() error
+	LastReadAt time.Time
 }
 
 func (w *WSClient) Start() error {
-	lastPingedAt := time.Now()
-	pingChecker := time.NewTicker(time.Second)
+	w.LastReadAt = time.Now()
+	pingTimer := time.NewTicker(time.Second * w.PingPeriod)
+	pongChecker := time.NewTicker(time.Second * w.PongPeriod)
 	w.stopChan = make(chan bool)
-	defer pingChecker.Stop()
+	defer pongChecker.Stop()
 	defer w.cleanup()
 
 	w.wsConn.SetReadDeadline(time.Now().Add(w.PongPeriod))
@@ -175,15 +178,22 @@ func (w *WSClient) Start() error {
 		case <-w.stopChan:
 			log.Println("Client stopped....")
 			return nil
-		case <-pingChecker.C:
-			if time.Now().Sub(lastPingedAt) > w.PongPeriod {
+		case <-pingTimer.C:
+			if w.Pinger != nil {
+				if err := w.Pinger(); err != nil {
+					log.Println("Ping failed: ", err)
+				}
+			}
+			break
+		case <-pongChecker.C:
+			if time.Now().Sub(w.LastReadAt).Seconds() > w.PongPeriod.Seconds() {
 				// Lost connection with client so can drop off?
 				log.Println("Connect stopped pinging. Killing proxy connection...")
 				return nil
 			}
 			break
 		case result := <-w.reader.RecvChan():
-			lastPingedAt = time.Now()
+			w.LastReadAt = time.Now()
 			w.wsConn.SetReadDeadline(time.Now().Add(w.PongPeriod))
 			if result.Error != nil {
 				if result.Error != io.EOF {
