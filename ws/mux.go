@@ -16,11 +16,10 @@ type WSMsgType interface{}
 type WSFanOut = conc.FanOut[conc.Message[WSMsgType], conc.Message[WSMsgType]]
 
 type WSMux struct {
-	Upgrader            websocket.Upgrader
-	HandleClientMessage func(ws *WSMux, msg WSMsgType) error
-	allClients          map[*WSClient]map[string]bool
-	clientsByTopic      map[string]*WSFanOut
-	connsLock           sync.RWMutex
+	Upgrader       websocket.Upgrader
+	allClients     map[*WSClient]map[string]bool
+	clientsByTopic map[string]*WSFanOut
+	connsLock      sync.RWMutex
 }
 
 func NewWSMux() *WSMux {
@@ -152,15 +151,17 @@ func (w *WSMux) Subscribe(req *http.Request, writer http.ResponseWriter) (*WSCli
 }
 
 type WSClient struct {
-	PingPeriod time.Duration
-	PongPeriod time.Duration
-	wsMux      *WSMux
-	wsConn     *websocket.Conn
-	reader     *conc.Reader[WSMsgType]
-	writer     *conc.Writer[conc.Message[WSMsgType]]
-	stopChan   chan bool
-	Pinger     func(*WSClient) error
-	LastReadAt time.Time
+	PingPeriod          time.Duration
+	PongPeriod          time.Duration
+	wsMux               *WSMux
+	wsConn              *websocket.Conn
+	reader              *conc.Reader[WSMsgType]
+	writer              *conc.Writer[conc.Message[WSMsgType]]
+	stopChan            chan bool
+	Pinger              func(*WSClient) error
+	OnReadTimeout       func(*WSClient) bool
+	LastReadAt          time.Time
+	HandleClientMessage func(w *WSClient, msg WSMsgType) error
 }
 
 func (w *WSClient) Start() error {
@@ -188,8 +189,10 @@ func (w *WSClient) Start() error {
 		case <-pongChecker.C:
 			if time.Now().Sub(w.LastReadAt).Seconds() > w.PongPeriod.Seconds() {
 				// Lost connection with client so can drop off?
-				log.Println("Connect stopped pinging. Killing proxy connection...")
-				return nil
+				if w.OnReadTimeout == nil || w.OnReadTimeout(w) {
+					log.Println("Connect stopped pinging. Killing proxy connection...")
+					return nil
+				}
 			}
 			break
 		case result := <-w.reader.RecvChan():
@@ -206,8 +209,8 @@ func (w *WSClient) Start() error {
 				// only to write to a listening agent FE so can just log and drop any
 				// thing sent by agent FE here - this can change later
 				log.Println("Received message from client: ", result.Value)
-				if w.wsMux.HandleClientMessage != nil {
-					w.wsMux.HandleClientMessage(w.wsMux, result.Value)
+				if w.HandleClientMessage != nil {
+					w.HandleClientMessage(w, result.Value)
 				}
 			}
 			break
@@ -221,7 +224,7 @@ func (w *WSClient) Stop() {
 	defer log.Println("Client accepted issued.")
 }
 
-func (w *WSClient) Write(msg WSMsgType) {
+func (w *WSClient) Send(msg WSMsgType) {
 	w.writer.Send(conc.Message[WSMsgType]{Value: msg})
 }
 
