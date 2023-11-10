@@ -148,7 +148,6 @@ func (fo *FanOut[T, U]) start() {
 						fo.outputSelfOwned = append(fo.outputSelfOwned, cmd.SelfOwned)
 						fo.outputFilters = append(fo.outputFilters, cmd.Filter)
 					}
-					log.Println("After adding: ", fo.outputChans)
 				} else if cmd.Name == "remove" {
 					// Remove an existing reader from our list
 					for index, ch := range fo.outputChans {
