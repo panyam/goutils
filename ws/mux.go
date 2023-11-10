@@ -22,6 +22,7 @@ type WSMux struct {
 	allConns     map[*WSConn]map[string]bool
 	connsByTopic map[string]*WSFanOut
 	connsLock    sync.RWMutex
+	connIdLock   sync.RWMutex
 	connIdMap    map[string]bool
 }
 
@@ -37,18 +38,49 @@ func NewWSMux() *WSMux {
 	}
 }
 
-// Publishes a message to all conns on caring about given topic
-func (w *WSMux) Publish(topicId string, msg WSMsgType) error {
+func (w *WSMux) Update(actions func(w *WSMux) error) error {
+	log.Println("Acquiring update lock")
+	w.connsLock.Lock()
+	defer w.connsLock.Unlock()
+	defer log.Println("Releasing update lock")
+	return actions(w)
+}
+
+func (w *WSMux) View(actions func(w *WSMux) error) error {
 	w.connsLock.RLock()
 	defer w.connsLock.RUnlock()
+	return actions(w)
+}
+
+// Publishes a message to all conns on caring about given topic
+func (w *WSMux) Publish(topicId string, msg WSMsgType, lock bool) error {
+	if lock {
+		w.connsLock.RLock()
+		defer w.connsLock.RUnlock()
+	}
 	if fanout, ok := w.connsByTopic[topicId]; ok && fanout != nil {
 		fanout.Send(conc.Message[WSMsgType]{Value: msg})
 	}
 	return nil
 }
 
+func (w *WSMux) GetConnsForTopic(topicId string, lock bool) (out []*WSConn) {
+	if lock {
+		w.connsLock.RLock()
+		defer w.connsLock.RUnlock()
+	}
+	for conn, topicset := range w.allConns {
+		if exists, ok := topicset[topicId]; ok && exists {
+			out = append(out, conn)
+			break
+		}
+	}
+	return
+}
+
 // Sets the "listening" conn on a topic. This ensures that there is
 // only a single conn for the given topic.
+/*
 func (w *WSMux) SetForTopic(topicId string, conn *WSConn) error {
 	w.connsLock.Lock()
 	defer w.connsLock.Unlock()
@@ -71,31 +103,16 @@ func (w *WSMux) SetForTopic(topicId string, conn *WSConn) error {
 	w.addToTopic(topicId, conn)
 	return nil
 }
+*/
 
 // Adds a conn to a particular topic id.  This makes it eligible to
 // receive messages sent on a particular topic
 // Normally this is called by
-func (w *WSMux) AddToTopic(topicId string, conn *WSConn) error {
-	w.connsLock.Lock()
-	defer w.connsLock.Unlock()
-	return w.addToTopic(topicId, conn)
-}
-
-// Remove a conn from particular topic id.  This makes it stop receiving
-// messages sent on the particular topic
-func (w *WSMux) RemoveFromTopic(topicId string, conn *WSConn) error {
-	w.connsLock.Lock()
-	defer w.connsLock.Unlock()
-	return w.removeFromTopic(topicId, conn)
-}
-
-func (w *WSMux) RemoveConn(conn *WSConn) error {
-	w.connsLock.Lock()
-	defer w.connsLock.Unlock()
-	return w.removeConn(conn)
-}
-
-func (w *WSMux) addToTopic(topicId string, conn *WSConn) error {
+func (w *WSMux) AddToTopic(topicId string, conn *WSConn, lock bool) error {
+	if lock {
+		w.connsLock.Lock()
+		defer w.connsLock.Unlock()
+	}
 	if topicSet, ok := w.connsByTopic[topicId]; !ok || topicSet == nil {
 		w.connsByTopic[topicId] = conc.NewIDFanOut[conc.Message[WSMsgType]](nil, nil)
 	}
@@ -107,26 +124,38 @@ func (w *WSMux) addToTopic(topicId string, conn *WSConn) error {
 	return nil
 }
 
-func (w *WSMux) removeFromTopic(topicId string, conn *WSConn) error {
+// Remove a conn from particular topic id.  This makes it stop receiving
+// messages sent on the particular topic
+func (w *WSMux) RemoveFromTopic(topicId string, conn *WSConn, lock bool) error {
+	if lock {
+		w.connsLock.Lock()
+		defer w.connsLock.Unlock()
+	}
 	if fanout, ok := w.connsByTopic[topicId]; ok && fanout != nil {
 		fanout.Remove(conn.writer.SendChan())
 	}
-	if connSet, ok := w.allConns[conn]; !ok || connSet == nil {
+	if connSet, ok := w.allConns[conn]; ok && connSet != nil {
 		delete(connSet, topicId)
 	}
 	return nil
 }
 
-func (w *WSMux) removeConn(conn *WSConn) error {
-	for topicId := range w.allConns[conn] {
-		w.removeFromTopic(topicId, conn)
+func (w *WSMux) RemoveConn(conn *WSConn, lock bool) error {
+	if lock {
+		w.connsLock.Lock()
+		defer w.connsLock.Unlock()
 	}
+	log.Println("Before Removing: ", w.allConns)
+	for topicId := range w.allConns[conn] {
+		w.RemoveFromTopic(topicId, conn, false)
+	}
+	log.Println("After Removing: ", w.allConns)
 	return nil
 }
 
 func (w *WSMux) lockConnId(connId string) error {
-	w.connsLock.Lock()
-	defer w.connsLock.Unlock()
+	w.connIdLock.Lock()
+	defer w.connIdLock.Unlock()
 	if _, ok := w.connIdMap[connId]; !ok {
 		return errors.New("id already taken")
 	}
@@ -135,8 +164,8 @@ func (w *WSMux) lockConnId(connId string) error {
 }
 
 func (w *WSMux) nextConnId() string {
-	w.connsLock.Lock()
-	defer w.connsLock.Unlock()
+	w.connIdLock.Lock()
+	defer w.connIdLock.Unlock()
 	for {
 		connId := gut.RandString(10, "")
 		if _, ok := w.connIdMap[connId]; !ok {
@@ -193,6 +222,8 @@ type WSConn struct {
 	ConnId        string
 	PingPeriod    time.Duration
 	PongPeriod    time.Duration
+	pingTimer     *time.Ticker
+	pongChecker   *time.Ticker
 	wsMux         *WSMux
 	wsConn        *websocket.Conn
 	reader        *conc.Reader[WSMsgType]
@@ -216,10 +247,9 @@ func (w *WSConn) sendPing() {
 
 func (w *WSConn) Start() error {
 	w.LastReadAt = time.Now()
-	pingTimer := time.NewTicker(w.PingPeriod)
-	pongChecker := time.NewTicker(w.PongPeriod)
+	w.pingTimer = time.NewTicker(w.PingPeriod)
+	w.pongChecker = time.NewTicker(w.PongPeriod)
 	w.stopChan = make(chan bool)
-	defer pongChecker.Stop()
 	defer w.cleanup()
 
 	w.wsConn.SetReadDeadline(time.Now().Add(w.PongPeriod))
@@ -230,10 +260,10 @@ func (w *WSConn) Start() error {
 		case <-w.stopChan:
 			log.Println("Connection stopped....")
 			return nil
-		case <-pingTimer.C:
+		case <-w.pingTimer.C:
 			w.sendPing()
 			break
-		case <-pongChecker.C:
+		case <-w.pongChecker.C:
 			if time.Now().Sub(w.LastReadAt).Seconds() > w.PongPeriod.Seconds() {
 				// Lost connection with conn so can drop off?
 				if w.OnReadTimeout == nil || w.OnReadTimeout(w) {
@@ -279,11 +309,17 @@ func (w *WSConn) Send(msg WSMsgType) {
 
 func (w *WSConn) cleanup() {
 	log.Println("Cleaning up conn....")
-	defer w.wsMux.RemoveConn(w)
+	w.wsMux.RemoveConn(w, true)
 	defer log.Println("Finished cleaning up conn.")
+	w.pingTimer.Stop()
+	w.pongChecker.Stop()
 	w.reader.Stop()
 	w.writer.Stop()
 	w.wsConn.Close()
 	close(w.stopChan)
 	w.stopChan = nil
+	w.pingTimer = nil
+	w.pongChecker = nil
+	w.reader = nil
+	w.writer = nil
 }
