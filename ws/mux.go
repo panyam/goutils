@@ -47,8 +47,10 @@ func (w *WSMux) Update(actions func(w *WSMux) error) error {
 }
 
 func (w *WSMux) View(actions func(w *WSMux) error) error {
+	log.Println("Acquiring view lock")
 	w.connsLock.RLock()
 	defer w.connsLock.RUnlock()
+	defer log.Println("Releasing view lock")
 	return actions(w)
 }
 
