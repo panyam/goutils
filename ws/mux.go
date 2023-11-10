@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -10,16 +11,18 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/panyam/goutils/conc"
+	gut "github.com/panyam/goutils/utils"
 )
 
 type WSMsgType interface{}
 type WSFanOut = conc.FanOut[conc.Message[WSMsgType], conc.Message[WSMsgType]]
 
 type WSMux struct {
-	Upgrader       websocket.Upgrader
-	allClients     map[*WSClient]map[string]bool
-	clientsByTopic map[string]*WSFanOut
-	connsLock      sync.RWMutex
+	Upgrader     websocket.Upgrader
+	allConns     map[*WSConn]map[string]bool
+	connsByTopic map[string]*WSFanOut
+	connsLock    sync.RWMutex
+	connIdMap    map[string]bool
 }
 
 func NewWSMux() *WSMux {
@@ -28,104 +31,140 @@ func NewWSMux() *WSMux {
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 		},
-		allClients:     make(map[*WSClient]map[string]bool),
-		clientsByTopic: make(map[string]*WSFanOut),
+		allConns:     make(map[*WSConn]map[string]bool),
+		connsByTopic: make(map[string]*WSFanOut),
+		connIdMap:    make(map[string]bool),
 	}
 }
 
-// Publishes a message to all clients on caring about given topic
+// Publishes a message to all conns on caring about given topic
 func (w *WSMux) Publish(topicId string, msg WSMsgType) error {
 	w.connsLock.RLock()
 	defer w.connsLock.RUnlock()
-	if fanout, ok := w.clientsByTopic[topicId]; ok && fanout != nil {
+	if fanout, ok := w.connsByTopic[topicId]; ok && fanout != nil {
 		fanout.Send(conc.Message[WSMsgType]{Value: msg})
 	}
 	return nil
 }
 
-// Sets the "listening" client on a topic. This ensures that there is
-// only a single client for the given topic.
-func (w *WSMux) SetForTopic(topicId string, client *WSClient) error {
+// Sets the "listening" conn on a topic. This ensures that there is
+// only a single conn for the given topic.
+func (w *WSMux) SetForTopic(topicId string, conn *WSConn) error {
 	w.connsLock.Lock()
 	defer w.connsLock.Unlock()
 
-	// go through all existing clients and if that existing client
+	// go through all existing conns and if that existing conn
 	// is registered to receive on this topic then remove its subscription
 	// (unless it is us)
-	for existing := range w.allClients {
-		if client != existing {
-			if fanout, ok := w.clientsByTopic[topicId]; ok && fanout != nil {
-				fanout.Remove(existing.writer.SendChan())
-			}
+	var toremove []*WSConn
+	for existing := range w.allConns {
+		if conn != existing {
+			toremove = append(toremove, existing)
+		} else {
+			panic("Connection already exists")
 		}
 	}
-	w.addToTopic(topicId, client)
+	for _, conn := range toremove {
+		w.removeFromTopic(topicId, conn)
+		conn.Stop()
+	}
+	w.addToTopic(topicId, conn)
 	return nil
 }
 
-// Adds a client to a particular topic id.  This makes it eligible to
+// Adds a conn to a particular topic id.  This makes it eligible to
 // receive messages sent on a particular topic
 // Normally this is called by
-func (w *WSMux) AddToTopic(topicId string, client *WSClient) error {
+func (w *WSMux) AddToTopic(topicId string, conn *WSConn) error {
 	w.connsLock.Lock()
 	defer w.connsLock.Unlock()
-	return w.addToTopic(topicId, client)
+	return w.addToTopic(topicId, conn)
 }
 
-// Remove a client from particular topic id.  This makes it stop receiving
+// Remove a conn from particular topic id.  This makes it stop receiving
 // messages sent on the particular topic
-func (w *WSMux) RemoveFromTopic(topicId string, client *WSClient) error {
+func (w *WSMux) RemoveFromTopic(topicId string, conn *WSConn) error {
 	w.connsLock.Lock()
 	defer w.connsLock.Unlock()
-	return w.removeFromTopic(topicId, client)
+	return w.removeFromTopic(topicId, conn)
 }
 
-func (w *WSMux) RemoveClient(client *WSClient) error {
+func (w *WSMux) RemoveConn(conn *WSConn) error {
 	w.connsLock.Lock()
 	defer w.connsLock.Unlock()
-	return w.removeClient(client)
+	return w.removeConn(conn)
 }
 
-func (w *WSMux) addToTopic(topicId string, client *WSClient) error {
-	if topicSet, ok := w.clientsByTopic[topicId]; !ok || topicSet == nil {
-		w.clientsByTopic[topicId] = conc.NewIDFanOut[conc.Message[WSMsgType]](nil, nil)
+func (w *WSMux) addToTopic(topicId string, conn *WSConn) error {
+	if topicSet, ok := w.connsByTopic[topicId]; !ok || topicSet == nil {
+		w.connsByTopic[topicId] = conc.NewIDFanOut[conc.Message[WSMsgType]](nil, nil)
 	}
-	if clientSet, ok := w.allClients[client]; !ok || clientSet == nil {
-		w.allClients[client] = make(map[string]bool)
+	if connSet, ok := w.allConns[conn]; !ok || connSet == nil {
+		w.allConns[conn] = make(map[string]bool)
 	}
-	w.allClients[client][topicId] = true
-	w.clientsByTopic[topicId].Add(client.writer.SendChan(), nil)
+	w.allConns[conn][topicId] = true
+	w.connsByTopic[topicId].Add(conn.writer.SendChan(), nil)
 	return nil
 }
 
-func (w *WSMux) removeFromTopic(topicId string, client *WSClient) error {
-	if fanout, ok := w.clientsByTopic[topicId]; ok && fanout != nil {
-		fanout.Remove(client.writer.SendChan())
+func (w *WSMux) removeFromTopic(topicId string, conn *WSConn) error {
+	if fanout, ok := w.connsByTopic[topicId]; ok && fanout != nil {
+		fanout.Remove(conn.writer.SendChan())
 	}
-	if clientSet, ok := w.allClients[client]; !ok || clientSet == nil {
-		delete(clientSet, topicId)
+	if connSet, ok := w.allConns[conn]; !ok || connSet == nil {
+		delete(connSet, topicId)
 	}
 	return nil
 }
 
-func (w *WSMux) removeClient(client *WSClient) error {
-	for topicId := range w.allClients[client] {
-		w.removeFromTopic(topicId, client)
+func (w *WSMux) removeConn(conn *WSConn) error {
+	for topicId := range w.allConns[conn] {
+		w.removeFromTopic(topicId, conn)
 	}
 	return nil
+}
+
+func (w *WSMux) lockConnId(connId string) error {
+	w.connsLock.Lock()
+	defer w.connsLock.Unlock()
+	if _, ok := w.connIdMap[connId]; !ok {
+		return errors.New("id already taken")
+	}
+	w.connIdMap[connId] = true
+	return nil
+}
+
+func (w *WSMux) nextConnId() string {
+	w.connsLock.Lock()
+	defer w.connsLock.Unlock()
+	for {
+		connId := gut.RandString(10, "")
+		if _, ok := w.connIdMap[connId]; !ok {
+			// found it
+			w.connIdMap[connId] = true
+			return connId
+		}
+	}
 }
 
 /**
  * Called when a new connection arrives.
  */
-func (w *WSMux) Subscribe(req *http.Request, writer http.ResponseWriter) (*WSClient, error) {
+func (w *WSMux) Subscribe(req *http.Request, writer http.ResponseWriter, connId string) (*WSConn, error) {
+	if connId == "" {
+		// autogen one
+		connId = w.nextConnId()
+	} else if err := w.lockConnId(connId); err != nil {
+		return nil, err
+	}
 	wsConn, err := w.Upgrader.Upgrade(writer, req, nil)
 	if err != nil {
 		fmt.Printf("Failed to set websocket upgrade: %+v", err)
 		SendJsonResponse(writer, nil, err)
 		return nil, err
 	}
-	out := WSClient{
+	out := WSConn{
+		ConnId:     connId,
 		PingPeriod: 10 * time.Second,
 		PongPeriod: 60 * time.Second,
 		wsMux:      w,
@@ -150,21 +189,32 @@ func (w *WSMux) Subscribe(req *http.Request, writer http.ResponseWriter) (*WSCli
 	return &out, nil
 }
 
-type WSClient struct {
-	PingPeriod          time.Duration
-	PongPeriod          time.Duration
-	wsMux               *WSMux
-	wsConn              *websocket.Conn
-	reader              *conc.Reader[WSMsgType]
-	writer              *conc.Writer[conc.Message[WSMsgType]]
-	stopChan            chan bool
-	Pinger              func(*WSClient) (WSMsgType, error)
-	OnReadTimeout       func(*WSClient) bool
-	LastReadAt          time.Time
-	HandleClientMessage func(w *WSClient, msg WSMsgType) error
+type WSConn struct {
+	ConnId        string
+	PingPeriod    time.Duration
+	PongPeriod    time.Duration
+	wsMux         *WSMux
+	wsConn        *websocket.Conn
+	reader        *conc.Reader[WSMsgType]
+	writer        *conc.Writer[conc.Message[WSMsgType]]
+	stopChan      chan bool
+	Pinger        func(*WSConn) (WSMsgType, error)
+	OnReadTimeout func(*WSConn) bool
+	LastReadAt    time.Time
+	HandleMessage func(w *WSConn, msg WSMsgType) error
 }
 
-func (w *WSClient) Start() error {
+func (w *WSConn) sendPing() {
+	if w.Pinger != nil {
+		if pingmsg, err := w.Pinger(w); err != nil {
+			log.Println("Ping failed: ", err)
+		} else if pingmsg != nil {
+			w.Send(pingmsg)
+		}
+	}
+}
+
+func (w *WSConn) Start() error {
 	w.LastReadAt = time.Now()
 	pingTimer := time.NewTicker(w.PingPeriod)
 	pongChecker := time.NewTicker(w.PongPeriod)
@@ -174,23 +224,18 @@ func (w *WSClient) Start() error {
 
 	w.wsConn.SetReadDeadline(time.Now().Add(w.PongPeriod))
 
+	w.sendPing()
 	for {
 		select {
 		case <-w.stopChan:
-			log.Println("Client stopped....")
+			log.Println("Connection stopped....")
 			return nil
 		case <-pingTimer.C:
-			if w.Pinger != nil {
-				if pingmsg, err := w.Pinger(w); err != nil {
-					log.Println("Ping failed: ", err)
-				} else if pingmsg != nil {
-					w.Send(pingmsg)
-				}
-			}
+			w.sendPing()
 			break
 		case <-pongChecker.C:
 			if time.Now().Sub(w.LastReadAt).Seconds() > w.PongPeriod.Seconds() {
-				// Lost connection with client so can drop off?
+				// Lost connection with conn so can drop off?
 				if w.OnReadTimeout == nil || w.OnReadTimeout(w) {
 					log.Println("Connect stopped pinging. Killing proxy connection...")
 					return nil
@@ -210,9 +255,9 @@ func (w *WSClient) Start() error {
 				// dont need to do anything as we are using these for outbound connections
 				// only to write to a listening agent FE so can just log and drop any
 				// thing sent by agent FE here - this can change later
-				log.Println("Received message from client: ", result.Value)
-				if w.HandleClientMessage != nil {
-					w.HandleClientMessage(w, result.Value)
+				log.Println("Received message from conn: ", result.Value)
+				if w.HandleMessage != nil {
+					w.HandleMessage(w, result.Value)
 				}
 			}
 			break
@@ -220,22 +265,25 @@ func (w *WSClient) Start() error {
 	}
 }
 
-func (w *WSClient) Stop() {
-	defer log.Println("Client stop issued...")
-	w.stopChan <- true
-	defer log.Println("Client accepted issued.")
+func (w *WSConn) Stop() {
+	if w.stopChan != nil {
+		log.Println("Stop issued for conn: ", w.ConnId)
+		w.stopChan <- true
+		log.Println("Conn stopped: ", w.ConnId)
+	}
 }
 
-func (w *WSClient) Send(msg WSMsgType) {
+func (w *WSConn) Send(msg WSMsgType) {
 	w.writer.Send(conc.Message[WSMsgType]{Value: msg})
 }
 
-func (w *WSClient) cleanup() {
-	log.Println("Cleaning up client....")
-	defer w.wsMux.RemoveClient(w)
-	defer log.Println("Finished cleaning up client.")
+func (w *WSConn) cleanup() {
+	log.Println("Cleaning up conn....")
+	defer w.wsMux.RemoveConn(w)
+	defer log.Println("Finished cleaning up conn.")
 	w.reader.Stop()
 	w.writer.Stop()
 	w.wsConn.Close()
 	close(w.stopChan)
+	w.stopChan = nil
 }

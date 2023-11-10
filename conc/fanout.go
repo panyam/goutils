@@ -148,11 +148,12 @@ func (fo *FanOut[T, U]) start() {
 						fo.outputSelfOwned = append(fo.outputSelfOwned, cmd.SelfOwned)
 						fo.outputFilters = append(fo.outputFilters, cmd.Filter)
 					}
+					log.Println("After adding: ", fo.outputChans)
 				} else if cmd.Name == "remove" {
 					// Remove an existing reader from our list
 					for index, ch := range fo.outputChans {
 						if ch == cmd.RemovedChannel {
-							log.Println("Removing channel: ", ch, len(fo.outputSelfOwned))
+							log.Println("Removing channel: ", ch, fo.outputChans)
 							if fo.outputSelfOwned[index] {
 								close(ch)
 							}
@@ -164,7 +165,7 @@ func (fo *FanOut[T, U]) start() {
 
 							fo.outputFilters[index] = fo.outputFilters[len(fo.outputFilters)-1]
 							fo.outputFilters = fo.outputFilters[:len(fo.outputFilters)-1]
-							log.Println("After Removing channel: ", ch, len(fo.outputSelfOwned))
+							log.Println("After Removing channel: ", ch, fo.outputChans)
 							break
 						}
 					}
