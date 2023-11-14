@@ -1,11 +1,12 @@
 package conc
 
 import (
-	"github.com/stretchr/testify/assert"
 	"log"
 	"sort"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFanOut(t *testing.T) {
@@ -19,7 +20,7 @@ func TestFanOut(t *testing.T) {
 		wg.Add(1)
 		outch := fanout.New(nil)
 		go func(o int, outch chan int) {
-			defer fanout.Remove(outch)
+			defer fanout.Remove(outch, nil)
 			defer wg.Done()
 			for count := 0; count < 10; count++ { //i fanout.IsRunning() {
 				// log.Printf("Waiting to receive, in outch: %d", o)
