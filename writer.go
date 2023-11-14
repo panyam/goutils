@@ -23,6 +23,8 @@ func NewWriter[W any](write WriterFunc[W]) *Writer[W] {
 }
 
 func (ch *Writer[T]) cleanup() {
+	log.Println("Cleaning up writer...")
+	defer log.Println("Finished leaning up writer...")
 	close(ch.msgChannel)
 	ch.msgChannel = nil
 	ch.RunnerBase.cleanup()
@@ -37,7 +39,7 @@ func (wc *Writer[W]) SendChan() chan W {
 }
 
 func (wc *Writer[W]) Send(req W) bool {
-	if !wc.IsRunning() {
+	if !wc.IsRunning() || wc.msgChannel == nil {
 		return false
 	}
 	wc.msgChannel <- req
@@ -57,12 +59,13 @@ func (wc *Writer[W]) start() {
 				// Here we send a request to the server
 				err := wc.Write(newRequest)
 				if err != nil {
+					log.Println("Write Error: ", err)
 					return
 				}
 				break
 			case controlRequest := <-wc.controlChan:
 				// For now only a "kill" can be sent here
-				log.Println("Received kill signal.  Quitting Reader.", controlRequest)
+				log.Println("Received kill signal.  Quitting Writer.", controlRequest)
 				return
 			}
 		}
