@@ -134,7 +134,7 @@ func (w *WSMux) RemoveFromTopic(topicId string, conn *WSConn, lock bool) error {
 		defer w.connsLock.Unlock()
 	}
 	if fanout, ok := w.connsByTopic[topicId]; ok && fanout != nil {
-		fanout.Remove(conn.writer.SendChan())
+		fanout.Remove(conn.writer.SendChan(), nil)
 	}
 	if connSet, ok := w.allConns[conn]; ok && connSet != nil {
 		delete(connSet, topicId)
@@ -147,11 +147,11 @@ func (w *WSMux) RemoveConn(conn *WSConn, lock bool) error {
 		w.connsLock.Lock()
 		defer w.connsLock.Unlock()
 	}
-	log.Println("Before Removing: ", w.allConns)
+	log.Println("Before Removing Conn: ", len(w.allConns), w.allConns)
 	for topicId := range w.allConns[conn] {
 		w.RemoveFromTopic(topicId, conn, false)
 	}
-	log.Println("After Removing: ", w.allConns)
+	log.Println("After Removing Conn: ", len(w.allConns), w.allConns)
 	return nil
 }
 
@@ -311,17 +311,26 @@ func (w *WSConn) Send(msg WSMsgType) {
 
 func (w *WSConn) cleanup() {
 	log.Println("Cleaning up conn....")
-	w.wsMux.RemoveConn(w, true)
 	defer log.Println("Finished cleaning up conn.")
-	w.pingTimer.Stop()
-	w.pongChecker.Stop()
-	w.reader.Stop()
-	w.writer.Stop()
-	w.wsConn.Close()
 	close(w.stopChan)
 	w.stopChan = nil
+
+	w.pingTimer.Stop()
 	w.pingTimer = nil
+
+	w.pongChecker.Stop()
 	w.pongChecker = nil
+
+	// Remove the connections first
+	w.wsMux.RemoveConn(w, true)
+
+	// Then stop reader/writer.  Order is important
+	// as the conn is using the reader/writer
+	w.reader.Stop()
 	w.reader = nil
+
+	w.writer.Stop()
 	w.writer = nil
+
+	w.wsConn.Close()
 }
