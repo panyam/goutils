@@ -1,5 +1,7 @@
 package conc
 
+import "log"
+
 type ReaderFunc[R any] func() (R, error)
 
 type Reader[R any] struct {
@@ -20,11 +22,14 @@ func NewReader[R any](read ReaderFunc[R]) *Reader[R] {
 }
 
 func (r *Reader[T]) cleanup() {
+	log.Println("Cleaning up reader...")
+	defer log.Println("Finished leaning up reader...")
 	if r.OnDone != nil {
 		r.OnDone(r)
 	}
-	close(r.msgChannel)
+	oldCh := r.msgChannel
 	r.msgChannel = nil
+	close(oldCh)
 	r.RunnerBase.cleanup()
 }
 
@@ -42,11 +47,14 @@ func (rc *Reader[R]) start() {
 		go func() {
 			for {
 				newMessage, err := rc.Read()
-				rc.msgChannel <- Message[R]{
-					Value: newMessage,
-					Error: err,
+				if rc.msgChannel != nil {
+					rc.msgChannel <- Message[R]{
+						Value: newMessage,
+						Error: err,
+					}
 				}
 				if err != nil {
+					log.Println("Read Error: ", err)
 					break
 				}
 			}
