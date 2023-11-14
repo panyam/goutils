@@ -12,6 +12,7 @@ type FanOutCmd[T any, U any] struct {
 	SelfOwned      bool
 	AddedChannel   chan<- U
 	RemovedChannel chan<- U
+	CallbackChan   chan error
 }
 
 /**
@@ -85,8 +86,8 @@ func (fo *FanOut[T, U]) Add(output chan<- U, filter func(T) bool) {
 	fo.controlChan <- FanOutCmd[T, U]{Name: "add", AddedChannel: output, Filter: filter}
 }
 
-func (fo *FanOut[T, U]) Remove(output chan<- U) {
-	fo.controlChan <- FanOutCmd[T, U]{Name: "remove", RemovedChannel: output}
+func (fo *FanOut[T, U]) Remove(output chan<- U, callbackChan chan error) {
+	fo.controlChan <- FanOutCmd[T, U]{Name: "remove", RemovedChannel: output, CallbackChan: callbackChan}
 }
 
 func (fo *FanOut[T, U]) cleanup() {
@@ -152,7 +153,7 @@ func (fo *FanOut[T, U]) start() {
 					// Remove an existing reader from our list
 					for index, ch := range fo.outputChans {
 						if ch == cmd.RemovedChannel {
-							log.Println("Removing channel: ", ch, fo.outputChans)
+							log.Println("Before Removing channel: ", ch, len(fo.outputChans), fo.outputChans)
 							if fo.outputSelfOwned[index] {
 								close(ch)
 							}
@@ -164,9 +165,12 @@ func (fo *FanOut[T, U]) start() {
 
 							fo.outputFilters[index] = fo.outputFilters[len(fo.outputFilters)-1]
 							fo.outputFilters = fo.outputFilters[:len(fo.outputFilters)-1]
-							log.Println("After Removing channel: ", ch, fo.outputChans)
+							log.Println("After Removing channel: ", ch, len(fo.outputChans), fo.outputChans)
 							break
 						}
+					}
+					if cmd.CallbackChan != nil {
+						cmd.CallbackChan <- nil
 					}
 				}
 				break
