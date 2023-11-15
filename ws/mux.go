@@ -40,17 +40,17 @@ func NewWSMux() *WSMux {
 
 func (w *WSMux) Update(actions func(w *WSMux) error) error {
 	log.Println("Acquiring update lock")
-	w.connsLock.Lock()
 	defer w.connsLock.Unlock()
 	defer log.Println("Releasing update lock")
+	w.connsLock.Lock()
 	return actions(w)
 }
 
 func (w *WSMux) View(actions func(w *WSMux) error) error {
 	log.Println("Acquiring view lock")
-	w.connsLock.RLock()
 	defer w.connsLock.RUnlock()
 	defer log.Println("Releasing view lock")
+	w.connsLock.RLock()
 	return actions(w)
 }
 
@@ -79,33 +79,6 @@ func (w *WSMux) GetConnsForTopic(topicId string, lock bool) (out []*WSConn) {
 	}
 	return
 }
-
-// Sets the "listening" conn on a topic. This ensures that there is
-// only a single conn for the given topic.
-/*
-func (w *WSMux) SetForTopic(topicId string, conn *WSConn) error {
-	w.connsLock.Lock()
-	defer w.connsLock.Unlock()
-
-	// go through all existing conns and if that existing conn
-	// is registered to receive on this topic then remove its subscription
-	// (unless it is us)
-	var toremove []*WSConn
-	for existing := range w.allConns {
-		if conn != existing {
-			toremove = append(toremove, existing)
-		} else {
-			panic("Connection already exists")
-		}
-	}
-	for _, conn := range toremove {
-		w.removeFromTopic(topicId, conn)
-		conn.Stop()
-	}
-	w.addToTopic(topicId, conn)
-	return nil
-}
-*/
 
 // Adds a conn to a particular topic id.  This makes it eligible to
 // receive messages sent on a particular topic
@@ -147,11 +120,12 @@ func (w *WSMux) RemoveConn(conn *WSConn, lock bool) error {
 		w.connsLock.Lock()
 		defer w.connsLock.Unlock()
 	}
-	log.Println("Before Removing Conn: ", len(w.allConns), w.allConns)
+	log.Println("Before Removing Conn: ", conn, len(w.allConns), w.allConns, w.allConns[conn])
 	for topicId := range w.allConns[conn] {
 		w.RemoveFromTopic(topicId, conn, false)
 	}
-	log.Println("After Removing Conn: ", len(w.allConns), w.allConns)
+	delete(w.allConns, conn)
+	log.Println("After Removing Conn: ", len(w.allConns), w.allConns, w.allConns[conn])
 	return nil
 }
 
@@ -181,60 +155,81 @@ func (w *WSMux) nextConnId() string {
 /**
  * Called when a new connection arrives.
  */
-func (w *WSMux) Subscribe(req *http.Request, writer http.ResponseWriter, connId string) (*WSConn, error) {
+func (w *WSMux) Subscribe(req *http.Request, rw http.ResponseWriter, connId string) (*WSConn, error) {
 	if connId == "" {
 		// autogen one
 		connId = w.nextConnId()
 	} else if err := w.lockConnId(connId); err != nil {
 		return nil, err
 	}
-	wsConn, err := w.Upgrader.Upgrade(writer, req, nil)
+	wsConn, err := w.Upgrader.Upgrade(rw, req, nil)
 	if err != nil {
 		fmt.Printf("Failed to set websocket upgrade: %+v", err)
-		SendJsonResponse(writer, nil, err)
+		SendJsonResponse(rw, nil, err)
 		return nil, err
 	}
-	out := WSConn{
-		ConnId:     connId,
-		PingPeriod: 10 * time.Second,
-		PongPeriod: 60 * time.Second,
-		wsMux:      w,
-		wsConn:     wsConn,
-		reader: conc.NewReader(func() (WSMsgType, error) {
-			var out WSMsgType
-			err := wsConn.ReadJSON(&out)
-			return out, err
-		}),
-		writer: conc.NewWriter(func(msg conc.Message[WSMsgType]) error {
-			if msg.Error == io.EOF {
-				log.Println("Streamer closed...", msg.Error)
-				SendJsonResponse(writer, nil, msg.Error)
-				return msg.Error
-			} else if msg.Error != nil {
-				return WSConnWriteError(wsConn, msg.Error)
-			} else {
-				return WSConnWriteMessage(wsConn, msg.Value)
-			}
-		}),
-	}
-	return &out, nil
+	out := NewWSConn(wsConn, nil, nil)
+	out.ConnId = connId
+	out.wsMux = w
+	return out, nil
 }
 
 type WSConn struct {
-	ConnId        string
-	PingPeriod    time.Duration
-	PongPeriod    time.Duration
-	pingTimer     *time.Ticker
-	pongChecker   *time.Ticker
-	wsMux         *WSMux
-	wsConn        *websocket.Conn
-	reader        *conc.Reader[WSMsgType]
-	writer        *conc.Writer[conc.Message[WSMsgType]]
-	stopChan      chan bool
-	Pinger        func(*WSConn) (WSMsgType, error)
+	ConnId      string
+	LastReadAt  time.Time
+	PingPeriod  time.Duration
+	PongPeriod  time.Duration
+	pingTimer   *time.Ticker
+	pongChecker *time.Ticker
+	wsMux       *WSMux
+	wsConn      *websocket.Conn
+	reader      *conc.Reader[WSMsgType]
+	writer      *conc.Writer[conc.Message[WSMsgType]]
+	stopChan    chan bool
+
+	// Callback to decide what the ping message should be
+	Pinger func(*WSConn) (WSMsgType, error)
+
+	// Called when read has timed but giving the client
+	// a chance to override the timeout
 	OnReadTimeout func(*WSConn) bool
-	LastReadAt    time.Time
+
+	// Called before the connection is closed so the client
+	// can perform any clietn before the internals are torn down
+	OnClose func(*WSConn)
+
+	// Called when a new message is available to be handled
 	HandleMessage func(w *WSConn, msg WSMsgType) error
+}
+
+func NewWSConn(conn *websocket.Conn, reader *conc.Reader[WSMsgType], writer *conc.Writer[conc.Message[WSMsgType]]) (w *WSConn) {
+	if reader == nil {
+		reader = conc.NewReader(func() (out WSMsgType, err error) {
+			err = conn.ReadJSON(&out)
+			return
+		})
+	}
+	if writer == nil {
+		writer = conc.NewWriter(func(msg conc.Message[WSMsgType]) error {
+			if msg.Error == io.EOF {
+				log.Println("Streamer closed...", msg.Error)
+				// do nothing
+				// SendJsonResponse(rw, nil, msg.Error)
+				return msg.Error
+			} else if msg.Error != nil {
+				return WSConnWriteError(conn, msg.Error)
+			} else {
+				return WSConnWriteMessage(conn, msg.Value)
+			}
+		})
+	}
+	return &WSConn{
+		PingPeriod: 10 * time.Second,
+		PongPeriod: 60 * time.Second,
+		wsConn:     conn,
+		reader:     reader,
+		writer:     writer,
+	}
 }
 
 func (w *WSConn) sendPing() {
@@ -266,10 +261,11 @@ func (w *WSConn) Start() error {
 			w.sendPing()
 			break
 		case <-w.pongChecker.C:
-			if time.Now().Sub(w.LastReadAt).Seconds() > w.PongPeriod.Seconds() {
+			hb_delta := time.Now().Sub(w.LastReadAt).Seconds()
+			if hb_delta > w.PongPeriod.Seconds() {
 				// Lost connection with conn so can drop off?
 				if w.OnReadTimeout == nil || w.OnReadTimeout(w) {
-					log.Println("Connect stopped pinging. Killing proxy connection...")
+					log.Printf("Last heart beat more than %d seconds ago.  Killing connection", int(hb_delta))
 					return nil
 				}
 			}
@@ -279,18 +275,25 @@ func (w *WSConn) Start() error {
 			w.wsConn.SetReadDeadline(time.Now().Add(w.PongPeriod))
 			if result.Error != nil {
 				if result.Error != io.EOF {
-					log.Println("WebSocket Error: ", result.Error, io.EOF)
+					if ce, ok := result.Error.(*websocket.CloseError); ok {
+						log.Println("WebSocket Closed: ", ce)
+						switch ce.Code {
+						case websocket.CloseAbnormalClosure:
+						case websocket.CloseNormalClosure:
+						case websocket.CloseGoingAway:
+							return nil
+						}
+					} else {
+						log.Println("Unknown Error: ", result.Error, io.EOF)
+					}
 					return result.Error
 				}
-			} else {
+			} else if w.HandleMessage != nil {
 				// we have an actual message being sent on this channel - typically
 				// dont need to do anything as we are using these for outbound connections
 				// only to write to a listening agent FE so can just log and drop any
 				// thing sent by agent FE here - this can change later
-				log.Println("Received message from conn: ", result.Value)
-				if w.HandleMessage != nil {
-					w.HandleMessage(w, result.Value)
-				}
+				w.HandleMessage(w, result.Value)
 			}
 			break
 		}
@@ -321,8 +324,10 @@ func (w *WSConn) cleanup() {
 	w.pongChecker.Stop()
 	w.pongChecker = nil
 
-	// Remove the connections first
-	w.wsMux.RemoveConn(w, true)
+	// Remove the connections first if this is a server side connection
+	if w.wsMux != nil {
+		w.wsMux.RemoveConn(w, true)
+	}
 
 	// Then stop reader/writer.  Order is important
 	// as the conn is using the reader/writer
