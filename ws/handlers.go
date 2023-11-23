@@ -11,53 +11,49 @@ import (
 	gut "github.com/panyam/goutils/utils"
 )
 
-type WSHandler[I any, O any, C any] interface {
+type WSHandler[I any, O any, S any] interface {
 	/**
 	 * Called to validate an http request to see if it is upgradeable to a ws conn
 	 */
-	Validate(w http.ResponseWriter, r *http.Request) (C, error)
+	Validate(w http.ResponseWriter, r *http.Request) (S, bool)
 
 	/**
 	 * Reads the next message from the ws conn.
 	 */
-	ReadMessage(ctx C, w *websocket.Conn) (I, error)
-
-	/**
-	 * Takes a message and format it to be written.
-	 */
-	WriteMessage(ctx C, conn *websocket.Conn, msg O, err error) error
+	ReadMessage(state S, w *websocket.Conn) (I, error)
 
 	/**
 	 * Called to send the next ping message.
 	 */
-	Pinger(ctx C) O
+	SendPing(state S) error
 
 	/**
 	 * Called to handle the next message from the input stream on the ws conn.
 	 */
-	HandleMessage(ctx C, msg I) error
+	HandleMessage(state S, msg I) error
 
 	/**
 	 * On created.
 	 */
-	OnStart(ctx C)
+	OnStart(state S, conn *websocket.Conn)
 
 	/**
 	 * Called to handle or suppress an error
 	 */
-	OnError(ctx C, err error) error
+	OnError(state S, err error) error
 
 	/**
 	 * Called when the connection closes.
 	 */
-	OnClose(ctx C)
-	OnTimeout(ctx C) bool
+	OnClose(state S)
+	OnTimeout(state S) bool
 }
 
 type JSONHandler[C any] struct {
+	Writer *conc.Writer[conc.Message[interface{}]]
 }
 
-func (j *JSONHandler[C]) Validate(w http.ResponseWriter, r *http.Request) (out C, err error) {
+func (j *JSONHandler[S]) Validate(w http.ResponseWriter, r *http.Request) (out S, isValid bool) {
 	// All connections upgradeable
 	return
 }
@@ -65,55 +61,54 @@ func (j *JSONHandler[C]) Validate(w http.ResponseWriter, r *http.Request) (out C
 /**
  * Reads the next message from the ws conn.
  */
-func (j *JSONHandler[C]) ReadMessage(ctx C, conn *websocket.Conn) (out interface{}, err error) {
+func (j *JSONHandler[S]) ReadMessage(state S, conn *websocket.Conn) (out interface{}, err error) {
 	err = conn.ReadJSON(&out)
 	return
 }
 
 /**
- * Writes the next message to the ws conn.
- */
-func (j *JSONHandler[C]) WriteMessage(ctx C, conn *websocket.Conn, msg interface{}, err error) error {
-	if err == io.EOF {
-		log.Println("Streamer closed...", err)
-		// do nothing
-		// SendJsonResponse(rw, nil, msg.Error)
-		return nil
-	} else if err != nil {
-		return WSConnWriteError(conn, err)
-	} else {
-		return WSConnWriteMessage(conn, msg)
-	}
-}
-
-/**
  * Called to send the next ping message.
  */
-func (j *JSONHandler[C]) Pinger(ctx C) interface{} {
+func (j *JSONHandler[S]) Pinger(state S) interface{} {
 	return gut.StringMap{"type": "ping"}
 }
 
 /**
  * Called to handle the next message from the input stream on the ws conn.
  */
-func (J *JSONHandler[C]) HandleMessage(ctx C, msg interface{}) error {
+func (j *JSONHandler[S]) HandleMessage(state S, msg interface{}) error {
 	return nil
 }
 
-func (J *JSONHandler[C]) OnStart(ctx C) {
+func (j *JSONHandler[S]) OnStart(state S, conn *websocket.Conn) {
+	j.Writer = conc.NewWriter(
+		func(msg conc.Message[interface{}]) error {
+			if msg.Error == io.EOF {
+				log.Println("Streamer closed...", msg.Error)
+				// do nothing
+				// SendJsonResponse(rw, nil, msg.Error)
+				return nil
+			} else if msg.Error != nil {
+				return WSConnWriteError(conn, msg.Error)
+			} else {
+				return WSConnWriteMessage(conn, msg.Value)
+			}
+		})
 }
 
-func (J *JSONHandler[C]) OnError(ctx C, err error) error {
+func (j *JSONHandler[S]) OnError(state S, err error) error {
 	return err
 }
 
 /**
  * Called when the connection closes.
  */
-func (J *JSONHandler[C]) OnClose(ctx C) {
+func (j *JSONHandler[S]) OnClose(state S) {
+	// All the core hapens here
+	j.Writer.Stop()
 }
 
-func (J *JSONHandler[C]) OnTimeout(ctx C) bool {
+func (j *JSONHandler[S]) OnTimeout(state S) bool {
 	return true
 }
 
@@ -123,7 +118,7 @@ type WSHandlerConfig struct {
 	PongPeriod time.Duration
 }
 
-func WithWSHandler[I any, O any, C any](config *WSHandlerConfig, h WSHandler[I, O, C]) http.HandlerFunc {
+func WithWSHandler[I any, O any, S any](config *WSHandlerConfig, h WSHandler[I, O, S]) http.HandlerFunc {
 	if config == nil {
 		config = &WSHandlerConfig{
 			Upgrader: websocket.Upgrader{
@@ -137,8 +132,8 @@ func WithWSHandler[I any, O any, C any](config *WSHandlerConfig, h WSHandler[I, 
 	}
 
 	return func(rw http.ResponseWriter, req *http.Request) {
-		ctx, err := h.Validate(rw, req)
-		if err != nil {
+		ctx, isValid := h.Validate(rw, req)
+		if !isValid {
 			return
 		}
 
@@ -155,39 +150,26 @@ func WithWSHandler[I any, O any, C any](config *WSHandlerConfig, h WSHandler[I, 
 		})
 		defer reader.Stop()
 
-		writer := conc.NewWriter[O](func(d O) error {
-			h.WriteMessage(ctx, conn, d, nil)
-			return nil
-		})
-		// All the core hapens here
-		defer writer.Stop()
-
 		lastReadAt := time.Now()
 		pingTimer := time.NewTicker(config.PingPeriod)
 		pongChecker := time.NewTicker(config.PongPeriod)
 		defer pingTimer.Stop()
 		defer pongChecker.Stop()
 
-		sendPing := func() {
-			if h.Pinger != nil {
-				pingmsg := h.Pinger(ctx)
-				writer.Write(pingmsg)
-			}
-		}
-
 		stopChan := make(chan bool)
 		defer close(stopChan)
 
+		h.OnStart(ctx, conn)
 		defer h.OnClose(ctx)
 
-		sendPing()
+		h.SendPing(ctx)
 		for {
 			select {
 			case <-stopChan:
 				log.Println("Connection stopped....")
 				return
 			case <-pingTimer.C:
-				sendPing()
+				h.SendPing(ctx)
 				break
 			case <-pongChecker.C:
 				hb_delta := time.Now().Sub(lastReadAt).Seconds()
@@ -217,7 +199,7 @@ func WithWSHandler[I any, O any, C any](config *WSHandlerConfig, h WSHandler[I, 
 							return
 						}
 					}
-				} else if h.HandleMessage != nil {
+				} else {
 					// we have an actual message being sent on this channel - typically
 					// dont need to do anything as we are using these for outbound connections
 					// only to write to a listening agent FE so can just log and drop any
