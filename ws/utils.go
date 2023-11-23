@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"github.com/panyam/goutils/conc"
 	gut "github.com/panyam/goutils/utils"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -90,4 +91,24 @@ func WSConnWriteMessage(wsConn *websocket.Conn, msg interface{}) error {
 		log.Println("Error sending message: ", err)
 	}
 	return outerr
+}
+
+func WSConnJSONReaderWriter(conn *websocket.Conn) (reader *conc.Reader[gut.StringMap], writer *conc.Writer[conc.Message[gut.StringMap]]) {
+	reader = conc.NewReader(func() (out gut.StringMap, err error) {
+		err = conn.ReadJSON(&out)
+		return
+	})
+	writer = conc.NewWriter(func(msg conc.Message[gut.StringMap]) error {
+		if msg.Error == io.EOF {
+			log.Println("Streamer closed...", msg.Error)
+			// do nothing
+			// SendJsonResponse(rw, nil, msg.Error)
+			return msg.Error
+		} else if msg.Error != nil {
+			return WSConnWriteError(conn, msg.Error)
+		} else {
+			return WSConnWriteMessage(conn, msg.Value)
+		}
+	})
+	return
 }

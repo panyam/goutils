@@ -2,10 +2,8 @@ package ws
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 
@@ -14,31 +12,23 @@ import (
 	gut "github.com/panyam/goutils/utils"
 )
 
-type WSMsgType interface{}
-type WSFanOut = conc.FanOut[conc.Message[WSMsgType], conc.Message[WSMsgType]]
-
-type WSMux struct {
-	Upgrader     websocket.Upgrader
-	allConns     map[*WSConn]map[string]bool
-	connsByTopic map[string]*WSFanOut
+type WSMux[I any, O any] struct {
+	allConns     map[*WSConn[I, O]]map[string]bool
+	connsByTopic map[string]*conc.FanOut[conc.Message[O], conc.Message[O]]
 	connsLock    sync.RWMutex
 	connIdLock   sync.RWMutex
 	connIdMap    map[string]bool
 }
 
-func NewWSMux() *WSMux {
-	return &WSMux{
-		Upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-		},
-		allConns:     make(map[*WSConn]map[string]bool),
-		connsByTopic: make(map[string]*WSFanOut),
+func NewWSMux[I any, O any]() *WSMux[I, O] {
+	return &WSMux[I, O]{
+		allConns:     make(map[*WSConn[I, O]]map[string]bool),
+		connsByTopic: make(map[string]*conc.FanOut[conc.Message[O], conc.Message[O]]),
 		connIdMap:    make(map[string]bool),
 	}
 }
 
-func (w *WSMux) Update(actions func(w *WSMux) error) error {
+func (w *WSMux[I, O]) Update(actions func(w *WSMux[I, O]) error) error {
 	log.Println("Acquiring update lock")
 	defer w.connsLock.Unlock()
 	defer log.Println("Releasing update lock")
@@ -46,7 +36,7 @@ func (w *WSMux) Update(actions func(w *WSMux) error) error {
 	return actions(w)
 }
 
-func (w *WSMux) View(actions func(w *WSMux) error) error {
+func (w *WSMux[I, O]) View(actions func(w *WSMux[I, O]) error) error {
 	log.Println("Acquiring view lock")
 	defer w.connsLock.RUnlock()
 	defer log.Println("Releasing view lock")
@@ -55,18 +45,18 @@ func (w *WSMux) View(actions func(w *WSMux) error) error {
 }
 
 // Publishes a message to all conns on caring about given topic
-func (w *WSMux) Publish(topicId string, msg WSMsgType, lock bool) error {
+func (w *WSMux[I, O]) Publish(topicId string, msg O, lock bool) error {
 	if lock {
 		w.connsLock.RLock()
 		defer w.connsLock.RUnlock()
 	}
 	if fanout, ok := w.connsByTopic[topicId]; ok && fanout != nil {
-		fanout.Send(conc.Message[WSMsgType]{Value: msg})
+		fanout.Send(conc.Message[O]{Value: msg})
 	}
 	return nil
 }
 
-func (w *WSMux) GetConnsForTopic(topicId string, lock bool) (out []*WSConn) {
+func (w *WSMux[I, O]) GetConnsForTopic(topicId string, lock bool) (out []*WSConn[I, O]) {
 	if lock {
 		w.connsLock.RLock()
 		defer w.connsLock.RUnlock()
@@ -83,13 +73,13 @@ func (w *WSMux) GetConnsForTopic(topicId string, lock bool) (out []*WSConn) {
 // Adds a conn to a particular topic id.  This makes it eligible to
 // receive messages sent on a particular topic
 // Normally this is called by
-func (w *WSMux) AddToTopic(topicId string, conn *WSConn, lock bool) error {
+func (w *WSMux[I, O]) AddToTopic(topicId string, conn *WSConn[I, O], lock bool) error {
 	if lock {
 		w.connsLock.Lock()
 		defer w.connsLock.Unlock()
 	}
 	if topicSet, ok := w.connsByTopic[topicId]; !ok || topicSet == nil {
-		w.connsByTopic[topicId] = conc.NewIDFanOut[conc.Message[WSMsgType]](nil, nil)
+		w.connsByTopic[topicId] = conc.NewIDFanOut[conc.Message[O]](nil, nil)
 	}
 	if connSet, ok := w.allConns[conn]; !ok || connSet == nil {
 		w.allConns[conn] = make(map[string]bool)
@@ -101,7 +91,7 @@ func (w *WSMux) AddToTopic(topicId string, conn *WSConn, lock bool) error {
 
 // Remove a conn from particular topic id.  This makes it stop receiving
 // messages sent on the particular topic
-func (w *WSMux) RemoveFromTopic(topicId string, conn *WSConn, lock bool) error {
+func (w *WSMux[I, O]) RemoveFromTopic(topicId string, conn *WSConn[I, O], lock bool) error {
 	if lock {
 		w.connsLock.Lock()
 		defer w.connsLock.Unlock()
@@ -115,7 +105,7 @@ func (w *WSMux) RemoveFromTopic(topicId string, conn *WSConn, lock bool) error {
 	return nil
 }
 
-func (w *WSMux) RemoveConn(conn *WSConn, lock bool) error {
+func (w *WSMux[I, O]) RemoveConn(conn *WSConn[I, O], lock bool) error {
 	if lock {
 		w.connsLock.Lock()
 		defer w.connsLock.Unlock()
@@ -129,7 +119,7 @@ func (w *WSMux) RemoveConn(conn *WSConn, lock bool) error {
 	return nil
 }
 
-func (w *WSMux) lockConnId(connId string) error {
+func (w *WSMux[I, O]) lockConnId(connId string) error {
 	w.connIdLock.Lock()
 	defer w.connIdLock.Unlock()
 	if _, ok := w.connIdMap[connId]; !ok {
@@ -139,7 +129,7 @@ func (w *WSMux) lockConnId(connId string) error {
 	return nil
 }
 
-func (w *WSMux) nextConnId() string {
+func (w *WSMux[I, O]) nextConnId() string {
 	w.connIdLock.Lock()
 	defer w.connIdLock.Unlock()
 	for {
@@ -155,101 +145,70 @@ func (w *WSMux) nextConnId() string {
 /**
  * Called when a new connection arrives.
  */
-func (w *WSMux) Subscribe(req *http.Request, rw http.ResponseWriter, connId string) (*WSConn, error) {
+
+func (w *WSMux[I, O]) Subscribe(reader *conc.Reader[I], writer *conc.Writer[conc.Message[O]], connId string) (*WSConn[I, O], error) {
 	if connId == "" {
 		// autogen one
 		connId = w.nextConnId()
 	} else if err := w.lockConnId(connId); err != nil {
 		return nil, err
 	}
-	wsConn, err := w.Upgrader.Upgrade(rw, req, nil)
-	if err != nil {
-		fmt.Printf("Failed to set websocket upgrade: %+v", err)
-		SendJsonResponse(rw, nil, err)
-		return nil, err
+	out := &WSConn[I, O]{
+		PingPeriod: 10 * time.Second,
+		PongPeriod: 60 * time.Second,
+		// wsConn:     conn,
+		reader: reader,
+		writer: writer,
 	}
-	out := NewWSConn(wsConn, nil, nil)
 	out.ConnId = connId
 	out.wsMux = w
 	return out, nil
 }
 
-type WSConn struct {
+type WSConn[I any, O any] struct {
 	ConnId      string
 	LastReadAt  time.Time
 	PingPeriod  time.Duration
 	PongPeriod  time.Duration
 	pingTimer   *time.Ticker
 	pongChecker *time.Ticker
-	wsMux       *WSMux
-	wsConn      *websocket.Conn
-	reader      *conc.Reader[WSMsgType]
-	writer      *conc.Writer[conc.Message[WSMsgType]]
-	stopChan    chan bool
+	wsMux       *WSMux[I, O]
+	// wsConn      *websocket.Conn
+	reader   *conc.Reader[I]
+	writer   *conc.Writer[conc.Message[O]]
+	stopChan chan bool
 
 	// Callback to decide what the ping message should be
-	Pinger func(*WSConn) (WSMsgType, error)
+	Pinger func(*WSConn[I, O]) (O, error)
 
 	// Called when read has timed but giving the client
 	// a chance to override the timeout
-	OnReadTimeout func(*WSConn) bool
+	OnReadTimeout func(*WSConn[I, O]) bool
 
 	// Called before the connection is closed so the client
 	// can perform any clietn before the internals are torn down
-	OnClose func(*WSConn)
+	OnClose func(*WSConn[I, O])
 
 	// Called when a new message is available to be handled
-	HandleMessage func(w *WSConn, msg WSMsgType) error
+	HandleMessage func(w *WSConn[I, O], msg I) error
 }
 
-func NewWSConn(conn *websocket.Conn, reader *conc.Reader[WSMsgType], writer *conc.Writer[conc.Message[WSMsgType]]) (w *WSConn) {
-	if reader == nil {
-		reader = conc.NewReader(func() (out WSMsgType, err error) {
-			err = conn.ReadJSON(&out)
-			return
-		})
-	}
-	if writer == nil {
-		writer = conc.NewWriter(func(msg conc.Message[WSMsgType]) error {
-			if msg.Error == io.EOF {
-				log.Println("Streamer closed...", msg.Error)
-				// do nothing
-				// SendJsonResponse(rw, nil, msg.Error)
-				return msg.Error
-			} else if msg.Error != nil {
-				return WSConnWriteError(conn, msg.Error)
-			} else {
-				return WSConnWriteMessage(conn, msg.Value)
-			}
-		})
-	}
-	return &WSConn{
-		PingPeriod: 10 * time.Second,
-		PongPeriod: 60 * time.Second,
-		wsConn:     conn,
-		reader:     reader,
-		writer:     writer,
-	}
-}
-
-func (w *WSConn) sendPing() {
+func (w *WSConn[I, O]) sendPing() {
 	if w.Pinger != nil {
 		if pingmsg, err := w.Pinger(w); err != nil {
 			log.Println("Ping failed: ", err)
-		} else if pingmsg != nil {
+		} else {
 			w.Send(pingmsg)
 		}
 	}
 }
 
-func (w *WSConn) Start() error {
+func (w *WSConn[I, O]) Start() error {
 	w.LastReadAt = time.Now()
 	w.pingTimer = time.NewTicker(w.PingPeriod)
 	w.pongChecker = time.NewTicker(w.PongPeriod)
 	w.stopChan = make(chan bool)
 	defer w.cleanup()
-
-	w.wsConn.SetReadDeadline(time.Now().Add(w.PongPeriod))
 
 	w.sendPing()
 	for {
@@ -272,7 +231,6 @@ func (w *WSConn) Start() error {
 			break
 		case result := <-w.reader.RecvChan():
 			w.LastReadAt = time.Now()
-			w.wsConn.SetReadDeadline(time.Now().Add(w.PongPeriod))
 			if result.Error != nil {
 				if result.Error != io.EOF {
 					if ce, ok := result.Error.(*websocket.CloseError); ok {
@@ -300,7 +258,7 @@ func (w *WSConn) Start() error {
 	}
 }
 
-func (w *WSConn) Stop() {
+func (w *WSConn[I, O]) Stop() {
 	if w.stopChan != nil {
 		log.Println("Stop issued for conn: ", w.ConnId)
 		w.stopChan <- true
@@ -308,11 +266,11 @@ func (w *WSConn) Stop() {
 	}
 }
 
-func (w *WSConn) Send(msg WSMsgType) {
-	w.writer.Send(conc.Message[WSMsgType]{Value: msg})
+func (w *WSConn[I, O]) Send(msg O) {
+	w.writer.Send(conc.Message[O]{Value: msg})
 }
 
-func (w *WSConn) cleanup() {
+func (w *WSConn[I, O]) cleanup() {
 	log.Println("Cleaning up conn....")
 	defer log.Println("Finished cleaning up conn.")
 	close(w.stopChan)
@@ -336,6 +294,4 @@ func (w *WSConn) cleanup() {
 
 	w.writer.Stop()
 	w.writer = nil
-
-	w.wsConn.Close()
 }
