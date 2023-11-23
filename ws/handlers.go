@@ -35,7 +35,7 @@ type WSHandler[I any, O any, S any] interface {
 	/**
 	 * On created.
 	 */
-	OnStart(state S, conn *websocket.Conn)
+	OnStart(state S, conn *websocket.Conn) error
 
 	/**
 	 * Called to handle or suppress an error
@@ -69,8 +69,9 @@ func (j *JSONHandler[S]) ReadMessage(state S, conn *websocket.Conn) (out interfa
 /**
  * Called to send the next ping message.
  */
-func (j *JSONHandler[S]) Pinger(state S) interface{} {
-	return gut.StringMap{"type": "ping"}
+func (j *JSONHandler[S]) SendPing(state S) error {
+	j.Writer.Send(conc.Message[interface{}]{Value: gut.StringMap{"type": "ping"}})
+	return nil
 }
 
 /**
@@ -80,7 +81,7 @@ func (j *JSONHandler[S]) HandleMessage(state S, msg interface{}) error {
 	return nil
 }
 
-func (j *JSONHandler[S]) OnStart(state S, conn *websocket.Conn) {
+func (j *JSONHandler[S]) OnStart(state S, conn *websocket.Conn) error {
 	j.Writer = conc.NewWriter(
 		func(msg conc.Message[interface{}]) error {
 			if msg.Error == io.EOF {
@@ -94,6 +95,7 @@ func (j *JSONHandler[S]) OnStart(state S, conn *websocket.Conn) {
 				return WSConnWriteMessage(conn, msg.Value)
 			}
 		})
+	return nil
 }
 
 func (j *JSONHandler[S]) OnError(state S, err error) error {
@@ -105,32 +107,37 @@ func (j *JSONHandler[S]) OnError(state S, err error) error {
  */
 func (j *JSONHandler[S]) OnClose(state S) {
 	// All the core hapens here
-	j.Writer.Stop()
+	if j.Writer != nil {
+		j.Writer.Stop()
+	}
 }
 
 func (j *JSONHandler[S]) OnTimeout(state S) bool {
 	return true
 }
 
-type WSHandlerConfig struct {
+type WSConnConfig struct {
 	Upgrader   websocket.Upgrader
 	PingPeriod time.Duration
 	PongPeriod time.Duration
 }
 
-func WithWSHandler[I any, O any, S any](config *WSHandlerConfig, h WSHandler[I, O, S]) http.HandlerFunc {
-	if config == nil {
-		config = &WSHandlerConfig{
-			Upgrader: websocket.Upgrader{
-				ReadBufferSize:  1024,
-				WriteBufferSize: 1024,
-				CheckOrigin:     func(r *http.Request) bool { return true },
-			},
-			PingPeriod: time.Second * 30,
-			PongPeriod: time.Second * 300,
-		}
+func DefaultWSConnConfig() *WSConnConfig {
+	return &WSConnConfig{
+		Upgrader: websocket.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+			CheckOrigin:     func(r *http.Request) bool { return true },
+		},
+		PingPeriod: time.Second * 30,
+		PongPeriod: time.Second * 300,
 	}
+}
 
+func WSServe[I any, O any, S any](h WSHandler[I, O, S], config *WSConnConfig) http.HandlerFunc {
+	if config == nil {
+		config = DefaultWSConnConfig()
+	}
 	return func(rw http.ResponseWriter, req *http.Request) {
 		ctx, isValid := h.Validate(rw, req)
 		if !isValid {
@@ -145,69 +152,76 @@ func WithWSHandler[I any, O any, S any](config *WSHandlerConfig, h WSHandler[I, 
 			return
 		}
 		defer conn.Close()
-		reader := conc.NewReader[I](func() (I, error) {
-			return h.ReadMessage(ctx, conn)
-		})
-		defer reader.Stop()
 
-		lastReadAt := time.Now()
-		pingTimer := time.NewTicker(config.PingPeriod)
-		pongChecker := time.NewTicker(config.PongPeriod)
-		defer pingTimer.Stop()
-		defer pongChecker.Stop()
+		WSHandleConn[I, O, S](conn, h, ctx, config)
+	}
+}
 
-		stopChan := make(chan bool)
-		defer close(stopChan)
+func WSHandleConn[I any, O any, S any](conn *websocket.Conn, h WSHandler[I, O, S], ctx S, config *WSConnConfig) {
+	if config == nil {
+		config = DefaultWSConnConfig()
+	}
+	reader := conc.NewReader[I](func() (I, error) {
+		return h.ReadMessage(ctx, conn)
+	})
+	defer reader.Stop()
 
-		h.OnStart(ctx, conn)
-		defer h.OnClose(ctx)
+	lastReadAt := time.Now()
+	pingTimer := time.NewTicker(config.PingPeriod)
+	pongChecker := time.NewTicker(config.PongPeriod)
+	defer pingTimer.Stop()
+	defer pongChecker.Stop()
 
-		h.SendPing(ctx)
-		for {
-			select {
-			case <-stopChan:
-				log.Println("Connection stopped....")
-				return
-			case <-pingTimer.C:
-				h.SendPing(ctx)
-				break
-			case <-pongChecker.C:
-				hb_delta := time.Now().Sub(lastReadAt).Seconds()
-				if hb_delta > config.PongPeriod.Seconds() {
-					// Lost connection with conn so can drop off?
-					if h.OnTimeout(ctx) {
-						log.Printf("Last heart beat more than %d seconds ago.  Killing connection", int(hb_delta))
-						return
-					}
+	defer h.OnClose(ctx)
+	err := h.OnStart(ctx, conn)
+	if err != nil {
+		return
+	}
+
+	conn.SetReadDeadline(time.Now().Add(config.PongPeriod))
+	h.SendPing(ctx)
+	for {
+		select {
+		case <-pingTimer.C:
+			h.SendPing(ctx)
+			break
+		case <-pongChecker.C:
+			hb_delta := time.Now().Sub(lastReadAt).Seconds()
+			if hb_delta > config.PongPeriod.Seconds() {
+				// Lost connection with conn so can drop off?
+				if h.OnTimeout(ctx) {
+					log.Printf("Last heart beat more than %d seconds ago.  Killing connection", int(hb_delta))
+					return
 				}
-				break
-			case result := <-reader.RecvChan():
-				lastReadAt = time.Now()
-				if result.Error != nil {
-					if result.Error != io.EOF {
-						if ce, ok := result.Error.(*websocket.CloseError); ok {
-							log.Println("WebSocket Closed: ", ce)
-							switch ce.Code {
-							case websocket.CloseAbnormalClosure:
-							case websocket.CloseNormalClosure:
-							case websocket.CloseGoingAway:
-								return
-							}
-						}
-						if h.OnError(ctx, result.Error) != nil {
-							log.Println("Unknown Error: ", result.Error)
+			}
+			break
+		case result := <-reader.RecvChan():
+			conn.SetReadDeadline(time.Now().Add(config.PongPeriod))
+			lastReadAt = time.Now()
+			if result.Error != nil {
+				if result.Error != io.EOF {
+					if ce, ok := result.Error.(*websocket.CloseError); ok {
+						log.Println("WebSocket Closed: ", ce)
+						switch ce.Code {
+						case websocket.CloseAbnormalClosure:
+						case websocket.CloseNormalClosure:
+						case websocket.CloseGoingAway:
 							return
 						}
 					}
-				} else {
-					// we have an actual message being sent on this channel - typically
-					// dont need to do anything as we are using these for outbound connections
-					// only to write to a listening agent FE so can just log and drop any
-					// thing sent by agent FE here - this can change later
-					h.HandleMessage(ctx, result.Value)
+					if h.OnError(ctx, result.Error) != nil {
+						log.Println("Unknown Error: ", result.Error)
+						return
+					}
 				}
-				break
+			} else {
+				// we have an actual message being sent on this channel - typically
+				// dont need to do anything as we are using these for outbound connections
+				// only to write to a listening agent FE so can just log and drop any
+				// thing sent by agent FE here - this can change later
+				h.HandleMessage(ctx, result.Value)
 			}
+			break
 		}
 	}
 }
