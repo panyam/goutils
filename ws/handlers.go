@@ -78,6 +78,7 @@ func (j *JSONHandler[S]) SendPing(state S) error {
  * Called to handle the next message from the input stream on the ws conn.
  */
 func (j *JSONHandler[S]) HandleMessage(state S, msg interface{}) error {
+	log.Println("Received Message: ", msg)
 	return nil
 }
 
