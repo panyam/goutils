@@ -89,11 +89,11 @@ func WSServe[I any, S WSConn[I]](h WSHandler[I, S], config *WSConnConfig) http.H
 		defer conn.Close()
 
 		log.Println("Start Handling Conn with: ", ctx)
-		WSHandleConn[I](conn, h, ctx, config)
+		WSHandleConn[I](conn, ctx, config)
 	}
 }
 
-func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, h WSHandler[I, S], ctx S, config *WSConnConfig) {
+func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, ctx S, config *WSConnConfig) {
 	if config == nil {
 		config = DefaultWSConnConfig()
 	}
