@@ -64,3 +64,10 @@ func MapValues[V any, K comparable](input map[K]V) []V {
 	}
 	return out
 }
+
+func Reduce[T any, V any](input []T, reducer func(index int, item T, output V) V, out V) V {
+	for i, val := range input {
+		out = reducer(i, val, out)
+	}
+	return out
+}
