@@ -79,12 +79,12 @@ var ALPHABET_REVERSE = gut.AlphaReverseMap(ALPHABET, nil)
 
 func (f *FlaskAuth) DecodeSessionUserId(userid string) (out []interface{}) {
 	userid = gut.PaddedWith(userid, '=')
-	log.Printf("NormalizedKey: [%s]", f.NormalizedSecretKey())
+	// log.Printf("NormalizedKey: [%s]", f.NormalizedSecretKey())
 	key := fernet.MustDecodeKeys(f.NormalizedSecretKey())
 	data := fernet.VerifyAndDecrypt([]byte(userid), 0, key)
-	log.Println("Data: ", data)
+	// log.Println("Data: ", data)
 	parts := strings.Split(string(data), "|")
-	log.Println("Data: ", userid, parts)
+	// log.Println("Data: ", userid, parts)
 	if parts != nil {
 		for _, part := range parts {
 			if part[0] == '~' {
@@ -111,6 +111,5 @@ func (f *FlaskAuth) ParseSignedCookieValue(value string) (parts []interface{}, s
 	}
 
 	parts = f.DecodeSessionUserId(user_id.(string))
-	log.Println("Found Parts: ", parts)
 	return
 }
