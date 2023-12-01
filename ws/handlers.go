@@ -177,19 +177,23 @@ func (j *JSONHandler) Validate(w http.ResponseWriter, r *http.Request) (out WSCo
 }
 
 type JSONConn struct {
-	Writer *conc.Writer[conc.Message[interface{}]]
-	connId string
+	Writer    *conc.Writer[conc.Message[interface{}]]
+	NameStr   string
+	ConnIdStr string
 }
 
 func (j *JSONConn) Name() string {
-	return "JSONConn"
+	if j.NameStr == "" {
+		j.NameStr = "JSONConn"
+	}
+	return j.NameStr
 }
 
 func (j *JSONConn) ConnId() string {
-	if j.connId == "" {
-		j.connId = gut.RandomString(10, "")
+	if j.ConnIdStr == "" {
+		j.ConnIdStr = gut.RandomString(10, "")
 	}
-	return j.connId
+	return j.ConnIdStr
 }
 
 /**
