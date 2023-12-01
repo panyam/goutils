@@ -191,7 +191,7 @@ func (j *JSONConn) Name() string {
 
 func (j *JSONConn) ConnId() string {
 	if j.ConnIdStr == "" {
-		j.ConnIdStr = gut.RandomString(10, "")
+		j.ConnIdStr = gut.RandString(10, "")
 	}
 	return j.ConnIdStr
 }
@@ -225,6 +225,7 @@ func (j *JSONConn) HandleMessage(msg interface{}) error {
 }
 
 func (j *JSONConn) OnStart(conn *websocket.Conn) error {
+	log.Printf("Starting %s connection: %s", j.Name(), j.ConnId()) // E: e.connId undefined (type *HubConn has n…
 	j.Writer = conc.NewWriter(
 		func(msg conc.Message[interface{}]) error {
 			if msg.Error == io.EOF {
@@ -253,6 +254,7 @@ func (j *JSONConn) OnClose() {
 	if j.Writer != nil {
 		j.Writer.Stop()
 	}
+	log.Printf("Closed %s connection: %s", j.Name(), j.ConnId()) // E: e.connId undefined (type *HubConn has n…
 }
 
 func (j *JSONConn) OnTimeout() bool {
