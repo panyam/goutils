@@ -208,7 +208,11 @@ func (j *JSONConn) ReadMessage(conn *websocket.Conn) (out interface{}, err error
  * Called to send the next ping message.
  */
 func (j *JSONConn) SendPing() error {
-	j.Writer.Send(conc.Message[interface{}]{Value: gut.StringMap{"type": "ping"}})
+	j.Writer.Send(conc.Message[interface{}]{Value: gut.StringMap{
+		"type":   "ping",
+		"name":   j.Name(),
+		"connId": j.ConnId(),
+	}})
 	return nil
 }
 
