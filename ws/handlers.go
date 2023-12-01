@@ -22,6 +22,12 @@ type WSConn[I any] interface {
 	 */
 	SendPing() error
 
+	// Optional Name of the connection
+	Name() string
+
+	// Optional connection id
+	ConnId() string
+
 	/**
 	 * Called to handle the next message from the input stream on the ws conn.
 	 */
@@ -165,13 +171,25 @@ func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, ctx S, config *WSCon
 type JSONHandler struct {
 }
 
-type JSONConn struct {
-	Writer *conc.Writer[conc.Message[interface{}]]
-}
-
 func (j *JSONHandler) Validate(w http.ResponseWriter, r *http.Request) (out WSConn[interface{}], isValid bool) {
 	// All connections upgradeable
 	return &JSONConn{}, true
+}
+
+type JSONConn struct {
+	Writer *conc.Writer[conc.Message[interface{}]]
+	connId string
+}
+
+func (j *JSONConn) Name() string {
+	return "JSONConn"
+}
+
+func (j *JSONConn) ConnId() string {
+	if j.connId == "" {
+		j.connId = gut.RandomString(10, "")
+	}
+	return j.connId
 }
 
 /**
