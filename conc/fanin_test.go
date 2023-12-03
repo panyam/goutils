@@ -1,11 +1,12 @@
 package conc
 
 import (
-	"github.com/stretchr/testify/assert"
 	"log"
 	"sort"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFanIn(t *testing.T) {
@@ -79,7 +80,7 @@ func TestMultiReadFanInToFanOut(t *testing.T) {
 		resch <- val
 		return nil
 	})
-	fanout := NewIDFanOut[int](nil, nil)
+	fanout := NewFanOut[int](nil)
 	fanout.Add(writer.SendChan(), nil)
 
 	go func() {

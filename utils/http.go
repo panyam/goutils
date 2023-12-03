@@ -113,6 +113,7 @@ func Call(req *http.Request) (response interface{}, err error) {
 	}
 
 	content_type := resp.Header.Get("Content-Type")
+	log.Println("Got Content Type: ", content_type)
 	if strings.HasPrefix(content_type, "application/json") {
 		err = json.Unmarshal(respbody, &response)
 	} else {

@@ -11,8 +11,7 @@ import (
 
 func TestFanOut(t *testing.T) {
 	log.Println("===================== TestFanOut =====================")
-	fanout := NewIDFanOut[int](nil, nil)
-	fanout.Mapper = IDFunc[int]
+	fanout := NewFanOut[int](nil)
 	var vals []int
 	var wg sync.WaitGroup
 	var m sync.Mutex
