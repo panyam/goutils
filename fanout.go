@@ -4,14 +4,14 @@ import (
 	"log"
 )
 
-type FilterFunc[T any] func(T) bool
+type FilterFunc[T any] func(*T) *T
 
-type FanOutCmd[T any, U any] struct {
+type FanOutCmd[T any] struct {
 	Name           string
 	Filter         FilterFunc[T]
 	SelfOwned      bool
-	AddedChannel   chan<- U
-	RemovedChannel chan<- U
+	AddedChannel   chan<- T
+	RemovedChannel chan<- T
 	CallbackChan   chan error
 }
 
@@ -19,60 +19,44 @@ type FanOutCmd[T any, U any] struct {
  * FanOut takes a message from one chanel, applies a mapper function
  * and fans it out to N output channels.
  */
-type FanOut[T any, U any] struct {
-	RunnerBase[FanOutCmd[T, U]]
-	Mapper func(inputs T) U
-
+type FanOut[T any] struct {
+	RunnerBase[FanOutCmd[T]]
 	selfOwnIn       bool
 	inputChan       chan T
-	outputChans     []chan<- U
+	outputChans     []chan<- T
 	outputSelfOwned []bool
 	outputFilters   []FilterFunc[T]
 }
 
-/**
- * Creates a new IDFanout bridge.
- */
-func NewIDFanOut[T any](input chan T, mapper func(T) T) *FanOut[T, T] {
-	if mapper == nil {
-		mapper = IDFunc[T]
-	}
-	return NewFanOut(input, mapper)
-}
-
-func NewFanOut[T any, U any](inputChan chan T, mapper func(T) U) *FanOut[T, U] {
-	if mapper == nil {
-		log.Panic("Mapper MUST be provided to convert between T and U")
-	}
+func NewFanOut[T any](inputChan chan T) *FanOut[T] {
 	selfOwnIn := false
 	if inputChan == nil {
 		selfOwnIn = true
 		inputChan = make(chan T)
 	}
-	out := &FanOut[T, U]{
-		RunnerBase: NewRunnerBase(FanOutCmd[T, U]{Name: "stop"}),
+	out := &FanOut[T]{
+		RunnerBase: NewRunnerBase(FanOutCmd[T]{Name: "stop"}),
 		inputChan:  inputChan,
 		selfOwnIn:  selfOwnIn,
-		Mapper:     mapper,
 	}
 	out.start()
 	return out
 }
 
-func (fo *FanOut[T, U]) Count() int {
+func (fo *FanOut[T]) Count() int {
 	return len(fo.outputChans)
 }
 
-func (fo *FanOut[T, U]) SendChan() <-chan T {
+func (fo *FanOut[T]) SendChan() <-chan T {
 	return fo.inputChan
 }
 
-func (fo *FanOut[T, U]) Send(value T) {
+func (fo *FanOut[T]) Send(value T) {
 	fo.inputChan <- value
 }
 
-func (fo *FanOut[T, U]) New(filter func(T) bool) chan U {
-	output := make(chan U, 1)
+func (fo *FanOut[T]) New(filter FilterFunc[T]) chan T {
+	output := make(chan T, 1)
 	fo.Add(output, filter)
 	return output
 }
@@ -82,15 +66,15 @@ func (fo *FanOut[T, U]) New(filter func(T) bool) chan U {
  * The filter method can be used to filter out message to certain
  * listeners if necessary.
  */
-func (fo *FanOut[T, U]) Add(output chan<- U, filter func(T) bool) {
-	fo.controlChan <- FanOutCmd[T, U]{Name: "add", AddedChannel: output, Filter: filter}
+func (fo *FanOut[T]) Add(output chan<- T, filter FilterFunc[T]) {
+	fo.controlChan <- FanOutCmd[T]{Name: "add", AddedChannel: output, Filter: filter}
 }
 
-func (fo *FanOut[T, U]) Remove(output chan<- U, callbackChan chan error) {
-	fo.controlChan <- FanOutCmd[T, U]{Name: "remove", RemovedChannel: output, CallbackChan: callbackChan}
+func (fo *FanOut[T]) Remove(output chan<- T, callbackChan chan error) {
+	fo.controlChan <- FanOutCmd[T]{Name: "remove", RemovedChannel: output, CallbackChan: callbackChan}
 }
 
-func (fo *FanOut[T, U]) cleanup() {
+func (fo *FanOut[T]) cleanup() {
 	if fo.selfOwnIn {
 		close(fo.inputChan)
 	}
@@ -107,7 +91,7 @@ func (fo *FanOut[T, U]) cleanup() {
 	fo.RunnerBase.cleanup()
 }
 
-func (fo *FanOut[T, U]) start() {
+func (fo *FanOut[T]) start() {
 	fo.RunnerBase.start()
 
 	go func() {
@@ -117,11 +101,17 @@ func (fo *FanOut[T, U]) start() {
 		for {
 			select {
 			case event := <-fo.inputChan:
-				result := fo.Mapper(event)
 				if fo.outputChans != nil {
 					for index, outputChan := range fo.outputChans {
-						if outputChan != nil && fo.outputFilters[index] == nil || fo.outputFilters[index](event) {
-							outputChan <- result
+						if outputChan != nil {
+							if fo.outputFilters[index] != nil {
+								newevent := fo.outputFilters[index](&event)
+								if newevent != nil {
+									outputChan <- *newevent
+								}
+							} else {
+								outputChan <- event
+							}
 						}
 					}
 				}
