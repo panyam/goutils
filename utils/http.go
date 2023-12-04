@@ -57,8 +57,8 @@ func NewJsonRequest(method string, endpoint string, body StringMap) (req *http.R
 		}
 	}
 	if body != nil {
-		marshalled, _ := json.MarshalIndent(body, "", "  ")
-		log.Println("BODY: ", string(marshalled))
+		json.MarshalIndent(body, "", "  ")
+		// log.Println("BODY: ", string(marshalled))
 	}
 	return NewBytesRequest(method, endpoint, bodyBytes)
 }
