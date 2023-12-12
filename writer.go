@@ -24,7 +24,7 @@ func NewWriter[W any](write WriterFunc[W]) *Writer[W] {
 
 func (ch *Writer[T]) cleanup() {
 	log.Println("Cleaning up writer...")
-	defer log.Println("Finished leaning up writer...")
+	defer log.Println("Finished cleaning up writer...")
 	close(ch.msgChannel)
 	ch.msgChannel = nil
 	ch.RunnerBase.cleanup()

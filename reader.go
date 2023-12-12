@@ -23,7 +23,7 @@ func NewReader[R any](read ReaderFunc[R]) *Reader[R] {
 
 func (r *Reader[T]) cleanup() {
 	log.Println("Cleaning up reader...")
-	defer log.Println("Finished leaning up reader...")
+	defer log.Println("Finished cleaning up reader...")
 	if r.OnDone != nil {
 		r.OnDone(r)
 	}
