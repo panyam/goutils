@@ -12,42 +12,15 @@ import (
 )
 
 type WSConn[I any] interface {
+	BiDirStreamConn[I]
 	/**
 	 * Reads the next message from the ws conn.
 	 */
 	ReadMessage(w *websocket.Conn) (I, error)
-
-	/**
-	 * Called to send the next ping message.
-	 */
-	SendPing() error
-
-	// Optional Name of the connection
-	Name() string
-
-	// Optional connection id
-	ConnId() string
-
-	/**
-	 * Called to handle the next message from the input stream on the ws conn.
-	 */
-	HandleMessage(msg I) error
-
 	/**
 	 * On created.
 	 */
 	OnStart(conn *websocket.Conn) error
-
-	/**
-	 * Called to handle or suppress an error
-	 */
-	OnError(err error) error
-
-	/**
-	 * Called when the connection closes.
-	 */
-	OnClose()
-	OnTimeout() bool
 }
 
 type WSHandler[I any, S WSConn[I]] interface {
@@ -58,9 +31,8 @@ type WSHandler[I any, S WSConn[I]] interface {
 }
 
 type WSConnConfig struct {
-	Upgrader   websocket.Upgrader
-	PingPeriod time.Duration
-	PongPeriod time.Duration
+	*BiDirStreamConfig
+	Upgrader websocket.Upgrader
 }
 
 func DefaultWSConnConfig() *WSConnConfig {
@@ -70,8 +42,7 @@ func DefaultWSConnConfig() *WSConnConfig {
 			WriteBufferSize: 1024,
 			CheckOrigin:     func(r *http.Request) bool { return true },
 		},
-		PingPeriod: time.Second * 30,
-		PongPeriod: time.Second * 300,
+		BiDirStreamConfig: DefaultBiDirStreamConfig(),
 	}
 }
 
@@ -171,13 +142,13 @@ func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, ctx S, config *WSCon
 type JSONHandler struct {
 }
 
-func (j *JSONHandler) Validate(w http.ResponseWriter, r *http.Request) (out WSConn[interface{}], isValid bool) {
+func (j *JSONHandler) Validate(w http.ResponseWriter, r *http.Request) (out WSConn[any], isValid bool) {
 	// All connections upgradeable
 	return &JSONConn{}, true
 }
 
 type JSONConn struct {
-	Writer    *conc.Writer[conc.Message[interface{}]]
+	Writer    *conc.Writer[conc.Message[any]]
 	NameStr   string
 	ConnIdStr string
 }
@@ -199,35 +170,15 @@ func (j *JSONConn) ConnId() string {
 /**
  * Reads the next message from the ws conn.
  */
-func (j *JSONConn) ReadMessage(conn *websocket.Conn) (out interface{}, err error) {
+func (j *JSONConn) ReadMessage(conn *websocket.Conn) (out any, err error) {
 	err = conn.ReadJSON(&out)
 	return
-}
-
-/**
- * Called to send the next ping message.
- */
-func (j *JSONConn) SendPing() error {
-	j.Writer.Send(conc.Message[interface{}]{Value: gut.StringMap{
-		"type":   "ping",
-		"name":   j.Name(),
-		"connId": j.ConnId(),
-	}})
-	return nil
-}
-
-/**
- * Called to handle the next message from the input stream on the ws conn.
- */
-func (j *JSONConn) HandleMessage(msg interface{}) error {
-	log.Println("Received Message: ", msg)
-	return nil
 }
 
 func (j *JSONConn) OnStart(conn *websocket.Conn) error {
 	log.Printf("Starting %s connection: %s", j.Name(), j.ConnId()) // E: e.connId undefined (type *HubConn has n…
 	j.Writer = conc.NewWriter(
-		func(msg conc.Message[interface{}]) error {
+		func(msg conc.Message[any]) error {
 			if msg.Error == io.EOF {
 				log.Println("Streamer closed...", msg.Error)
 				// do nothing
@@ -239,6 +190,26 @@ func (j *JSONConn) OnStart(conn *websocket.Conn) error {
 				return WSConnWriteMessage(conn, msg.Value)
 			}
 		})
+	return nil
+}
+
+/**
+ * Called to send the next ping message.
+ */
+func (j *JSONConn) SendPing() error {
+	j.Writer.Send(conc.Message[any]{Value: gut.StringMap{
+		"type":   "ping",
+		"name":   j.Name(),
+		"connId": j.ConnId(),
+	}})
+	return nil
+}
+
+/**
+ * Called to handle the next message from the input stream on the ws conn.
+ */
+func (j *JSONConn) HandleMessage(msg any) error {
+	log.Println("Received Message: ", msg)
 	return nil
 }
 
