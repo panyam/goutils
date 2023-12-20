@@ -3,17 +3,17 @@ package auth
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-gonic/gin"
-	"github.com/panyam/goutils/utils"
 	"log"
 	"math/rand"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-gonic/gin"
+	"github.com/panyam/goutils/utils"
 )
 
-type RequestHandler = func(ctx *gin.Context)
 type AuthFlowStarted = func(authFlow *AuthFlow, ctx *gin.Context)
 type AuthFlowCredentialsReceived = func(ctx *gin.Context)
 type IdentityFromProfileFunc = func(profile utils.StringMap) (ChannelId string, IdentityType string, IdentityKey string)
