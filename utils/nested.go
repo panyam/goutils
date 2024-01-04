@@ -2,10 +2,20 @@ package utils
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
-func GetMapField(input StringMap, fieldPath interface{}) (interface{}, error) {
+func GetMapFieldForced(input StringMap, fieldPath interface{}) any {
+	if out, err := GetMapField(input, fieldPath); err != nil {
+		slog.Debug(err.Error())
+		return nil
+	} else {
+		return out
+	}
+}
+
+func GetMapField(input StringMap, fieldPath interface{}) (any, error) {
 	curr := input
 	var field_names []string
 	if _, ok := fieldPath.(string); ok {
