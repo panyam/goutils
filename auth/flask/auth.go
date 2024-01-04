@@ -37,6 +37,7 @@ func (f *FlaskAuth) DecodeSessionCookie(base64value string) (out gut.StringMap, 
 	if decompress {
 		base64value = base64value[1:]
 	}
+	orig := base64value
 	base64value = strings.Map(func(ch rune) rune {
 		if ch == '-' {
 			ch = '+'
@@ -53,6 +54,7 @@ func (f *FlaskAuth) DecodeSessionCookie(base64value string) (out gut.StringMap, 
 	decoded, err := base64.StdEncoding.DecodeString(padded)
 	if err != nil {
 		log.Println("Error decoding: ", padded, err)
+		log.Println("Orig Value: ", orig)
 		return nil, err
 	}
 
