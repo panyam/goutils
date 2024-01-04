@@ -48,7 +48,6 @@ func (f *FlaskAuth) DecodeSessionCookie(base64value string) (out gut.StringMap, 
 		return ch
 	}, base64value)
 	parts := strings.Split(base64value, ".")
-	base64_encoded_data := parts[0]
 	var timestampBytes []byte
 	if len(parts) >= 1 {
 		if d, err := base64.StdEncoding.DecodeString(gut.PaddedWith(parts[1], '=')); err != nil {
@@ -67,6 +66,7 @@ func (f *FlaskAuth) DecodeSessionCookie(base64value string) (out gut.StringMap, 
 			log.Println("Decoded HMAC: ", hmacBytes)
 		}
 	}
+	base64_encoded_data := parts[0]
 	padded := gut.PaddedWith(base64_encoded_data, '=')
 	decoded, err := base64.StdEncoding.DecodeString(padded)
 	if err != nil {
