@@ -1,9 +1,10 @@
 package conc
 
 import (
-	"github.com/stretchr/testify/assert"
 	"log"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestReader(t *testing.T) {
@@ -11,9 +12,9 @@ func TestReader(t *testing.T) {
 	inch := make(chan int)
 	res := make(chan int, 5)
 	makereader := func(ch chan int) *Reader[int] {
-		return NewReader(func() (int, error) {
+		return NewReader(func() (int, error, bool) {
 			val := <-ch
-			return val, nil
+			return val, nil, false
 		})
 	}
 	reader := makereader(inch)

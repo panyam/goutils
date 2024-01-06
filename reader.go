@@ -1,6 +1,7 @@
 package conc
 
 import (
+	"errors"
 	"log"
 	"log/slog"
 	"net"
@@ -52,13 +53,13 @@ func (rc *Reader[R]) start() {
 				newMessage, err, closed := rc.Read()
 				timedOut := false
 				if err != nil {
-					if nerr, ok := err.(net.Error); ok {
+					nerr, ok := err.(net.Error)
+					if ok {
 						timedOut = nerr.Timeout()
-						slog.Info("Net Error: ", nerr, timedOut)
 					}
-					slog.Debug("TimedOut, Closed: ", timedOut, closed)
+					log.Println("Net Error, TimedOut, Closed, errors.Is.ErrClosed: ", nerr, timedOut, closed, errors.Is(err, net.ErrClosed), nil)
 				}
-				if rc.msgChannel != nil && !timedOut && !closed {
+				if rc.msgChannel != nil && !timedOut && !closed && !errors.Is(err, net.ErrClosed) {
 					rc.msgChannel <- Message[R]{
 						Value: newMessage,
 						Error: err,

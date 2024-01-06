@@ -111,9 +111,9 @@ func TestMultiReadFanInToFanOut(t *testing.T) {
 func TestMultiReadFanInFromReaders(t *testing.T) {
 	log.Println("===================== TestMultiReadFanInFromReaders =====================")
 	makereader := func(ch chan int) *Reader[int] {
-		return NewReader(func() (int, error) {
+		return NewReader(func() (int, error, bool) {
 			val := <-ch
-			return val, nil
+			return val, nil, false
 		})
 	}
 	NUM_CHANS := 1

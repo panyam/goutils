@@ -1,10 +1,11 @@
 package conc
 
 import (
-	"github.com/stretchr/testify/assert"
 	"log"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPipe(t *testing.T) {
@@ -44,9 +45,9 @@ func TestReader2Pipe(t *testing.T) {
 	inch := make(chan int)
 	outch := make(chan Message[int])
 	makereader := func(ch chan int) *Reader[int] {
-		return NewReader(func() (int, error) {
+		return NewReader(func() (int, error, bool) {
 			val := <-ch
-			return val, nil
+			return val, nil, false
 		})
 	}
 	reader := makereader(inch)
