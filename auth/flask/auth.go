@@ -16,6 +16,7 @@ import (
 
 type FlaskAuth struct {
 	AppSecretKey string
+	LogCookies   bool
 }
 
 func (f *FlaskAuth) NormalizedSecretKey() string {
@@ -54,7 +55,9 @@ func (f *FlaskAuth) DecodeSessionCookie(base64value string) (out gut.StringMap, 
 			log.Println("Error decoding timestamp: ", err)
 		} else {
 			timestampBytes = d
-			log.Println("Decoded TimeStamp: ", timestampBytes)
+			if f.LogCookies {
+				log.Println("Decoded TimeStamp: ", timestampBytes)
+			}
 		}
 	}
 	var hmacBytes []byte
@@ -63,7 +66,9 @@ func (f *FlaskAuth) DecodeSessionCookie(base64value string) (out gut.StringMap, 
 			log.Println("Error decoding timestamp: ", err)
 		} else {
 			hmacBytes = d
-			log.Println("Decoded HMAC: ", hmacBytes)
+			if f.LogCookies {
+				log.Println("Decoded HMAC: ", hmacBytes)
+			}
 		}
 	}
 	base64_encoded_data := parts[0]
@@ -73,6 +78,10 @@ func (f *FlaskAuth) DecodeSessionCookie(base64value string) (out gut.StringMap, 
 		log.Println("Error decoding: ", padded, err)
 		log.Println("Orig Value: ", orig)
 		return nil, err
+	} else {
+		if f.LogCookies {
+			log.Println("Decoded Cookie: ", decoded)
+		}
 	}
 
 	if decompress {

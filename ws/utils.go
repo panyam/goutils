@@ -94,8 +94,9 @@ func WSConnWriteMessage(wsConn *websocket.Conn, msg interface{}) error {
 }
 
 func WSConnJSONReaderWriter(conn *websocket.Conn) (reader *conc.Reader[gut.StringMap], writer *conc.Writer[conc.Message[gut.StringMap]]) {
-	reader = conc.NewReader(func() (out gut.StringMap, err error) {
+	reader = conc.NewReader(func() (out gut.StringMap, err error, closed bool) {
 		err = conn.ReadJSON(&out)
+		closed = websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNoStatusReceived, websocket.CloseAbnormalClosure)
 		return
 	})
 	writer = conc.NewWriter(func(msg conc.Message[gut.StringMap]) error {

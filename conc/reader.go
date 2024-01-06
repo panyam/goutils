@@ -1,8 +1,12 @@
 package conc
 
-import "log"
+import (
+	"log"
+	"log/slog"
+	"net"
+)
 
-type ReaderFunc[R any] func() (R, error)
+type ReaderFunc[R any] func() (msg R, err error, closed bool)
 
 type Reader[R any] struct {
 	RunnerBase[string]
@@ -22,8 +26,7 @@ func NewReader[R any](read ReaderFunc[R]) *Reader[R] {
 }
 
 func (r *Reader[T]) cleanup() {
-	log.Println("Cleaning up reader...")
-	defer log.Println("Finished cleaning up reader...")
+	defer log.Println("Cleaned up reader...")
 	if r.OnDone != nil {
 		r.OnDone(r)
 	}
@@ -46,15 +49,23 @@ func (rc *Reader[R]) start() {
 		defer rc.cleanup()
 		go func() {
 			for {
-				newMessage, err := rc.Read()
-				if rc.msgChannel != nil {
+				newMessage, err, closed := rc.Read()
+				timedOut := false
+				if err != nil {
+					if nerr, ok := err.(net.Error); ok {
+						timedOut = nerr.Timeout()
+						slog.Info("Net Error: ", nerr, timedOut)
+					}
+					slog.Debug("TimedOut, Closed: ", timedOut, closed)
+				}
+				if rc.msgChannel != nil && !timedOut && !closed {
 					rc.msgChannel <- Message[R]{
 						Value: newMessage,
 						Error: err,
 					}
 				}
 				if err != nil {
-					log.Println("Read Error: ", err)
+					slog.Debug("Read Error: ", err)
 					break
 				}
 			}

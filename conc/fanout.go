@@ -143,7 +143,7 @@ func (fo *FanOut[T]) start() {
 					// Remove an existing reader from our list
 					for index, ch := range fo.outputChans {
 						if ch == cmd.RemovedChannel {
-							log.Println("Before Removing channel: ", ch, len(fo.outputChans), fo.outputChans)
+							// log.Println("Before Removing channel: ", ch, len(fo.outputChans), fo.outputChans)
 							if fo.outputSelfOwned[index] {
 								close(ch)
 							}
@@ -155,7 +155,7 @@ func (fo *FanOut[T]) start() {
 
 							fo.outputFilters[index] = fo.outputFilters[len(fo.outputFilters)-1]
 							fo.outputFilters = fo.outputFilters[:len(fo.outputFilters)-1]
-							log.Println("After Removing channel: ", ch, len(fo.outputChans), fo.outputChans)
+							// log.Println("After Removing channel: ", ch, len(fo.outputChans), fo.outputChans)
 							break
 						}
 					}

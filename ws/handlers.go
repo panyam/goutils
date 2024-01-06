@@ -3,6 +3,7 @@ package ws
 import (
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -65,7 +66,7 @@ func WSServe[I any, S WSConn[I]](h WSHandler[I, S], config *WSConnConfig) http.H
 		}
 		defer conn.Close()
 
-		log.Println("Start Handling Conn with: ", ctx)
+		slog.Debug("Start Handling Conn with: ", ctx)
 		WSHandleConn[I](conn, ctx, config)
 	}
 }
@@ -74,8 +75,10 @@ func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, ctx S, config *WSCon
 	if config == nil {
 		config = DefaultWSConnConfig()
 	}
-	reader := conc.NewReader[I](func() (I, error) {
-		return ctx.ReadMessage(conn)
+	reader := conc.NewReader[I](func() (I, error, bool) {
+		res, err := ctx.ReadMessage(conn)
+		closed := websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNoStatusReceived, websocket.CloseAbnormalClosure)
+		return res, err, closed
 	})
 	defer reader.Stop()
 
@@ -92,7 +95,6 @@ func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, ctx S, config *WSCon
 	}
 
 	conn.SetReadDeadline(time.Now().Add(config.PongPeriod))
-	ctx.SendPing()
 	for {
 		select {
 		case <-pingTimer.C:
@@ -123,7 +125,7 @@ func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, ctx S, config *WSCon
 						}
 					}
 					if ctx.OnError(result.Error) != nil {
-						log.Println("Unknown Error: ", result.Error)
+						log.Println("Closing due to Error: ", result.Error)
 						return
 					}
 				}
@@ -151,6 +153,7 @@ type JSONConn struct {
 	Writer    *conc.Writer[conc.Message[any]]
 	NameStr   string
 	ConnIdStr string
+	PingId    int64
 }
 
 func (j *JSONConn) Name() string {
@@ -197,8 +200,10 @@ func (j *JSONConn) OnStart(conn *websocket.Conn) error {
  * Called to send the next ping message.
  */
 func (j *JSONConn) SendPing() error {
+	j.PingId += 1
 	j.Writer.Send(conc.Message[any]{Value: gut.StringMap{
 		"type":   "ping",
+		"pingId": j.PingId,
 		"name":   j.Name(),
 		"connId": j.ConnId(),
 	}})

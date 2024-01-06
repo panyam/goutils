@@ -57,6 +57,7 @@ func (wc *Writer[W]) start() {
 			select {
 			case newRequest := <-wc.msgChannel:
 				// Here we send a request to the server
+				log.Println("Trying to write: ", newRequest)
 				err := wc.Write(newRequest)
 				if err != nil {
 					log.Println("Write Error: ", err)
