@@ -12,9 +12,9 @@ func TestReader(t *testing.T) {
 	inch := make(chan int)
 	res := make(chan int, 5)
 	makereader := func(ch chan int) *Reader[int] {
-		return NewReader(func() (int, error, bool) {
+		return NewReader(func() (int, error) {
 			val := <-ch
-			return val, nil, false
+			return val, nil
 		})
 	}
 	reader := makereader(inch)
