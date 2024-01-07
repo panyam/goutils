@@ -129,7 +129,7 @@ func (fo *FanOut[T]) start() {
 							if oc == cmd.AddedChannel {
 								found = true
 								// Or should we replace this?
-								log.Println("Output Channel already exists.  Will skip.  Remove it first if you want to add again or change filter funcs")
+								log.Println("Output Channel already exists.  Will skip.  Remove it first if you want to add again or change filter funcs", cmd.AddedChannel, oc, fo.outputChans)
 								break
 							}
 						}
