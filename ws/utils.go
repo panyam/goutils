@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"net"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -94,9 +95,11 @@ func WSConnWriteMessage(wsConn *websocket.Conn, msg interface{}) error {
 }
 
 func WSConnJSONReaderWriter(conn *websocket.Conn) (reader *conc.Reader[gut.StringMap], writer *conc.Writer[conc.Message[gut.StringMap]]) {
-	reader = conc.NewReader(func() (out gut.StringMap, err error, closed bool) {
+	reader = conc.NewReader(func() (out gut.StringMap, err error) {
 		err = conn.ReadJSON(&out)
-		closed = websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNoStatusReceived, websocket.CloseAbnormalClosure)
+		if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNoStatusReceived, websocket.CloseAbnormalClosure) {
+			err = net.ErrClosed
+		}
 		return
 	})
 	writer = conc.NewWriter(func(msg conc.Message[gut.StringMap]) error {

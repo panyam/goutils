@@ -7,7 +7,7 @@ import (
 	"net"
 )
 
-type ReaderFunc[R any] func() (msg R, err error, closed bool)
+type ReaderFunc[R any] func() (msg R, err error)
 
 type Reader[R any] struct {
 	RunnerBase[string]
@@ -50,16 +50,16 @@ func (rc *Reader[R]) start() {
 		defer rc.cleanup()
 		go func() {
 			for {
-				newMessage, err, closed := rc.Read()
+				newMessage, err := rc.Read()
 				timedOut := false
 				if err != nil {
 					nerr, ok := err.(net.Error)
 					if ok {
 						timedOut = nerr.Timeout()
 					}
-					log.Println("Net Error, TimedOut, Closed, errors.Is.ErrClosed: ", nerr, timedOut, closed, errors.Is(err, net.ErrClosed), nil)
+					log.Println("Net Error, TimedOut, Closed, errors.Is.ErrClosed: ", nerr, timedOut, errors.Is(err, net.ErrClosed), nil)
 				}
-				if rc.msgChannel != nil && !timedOut && !closed && !errors.Is(err, net.ErrClosed) {
+				if rc.msgChannel != nil && !timedOut && !errors.Is(err, net.ErrClosed) {
 					rc.msgChannel <- Message[R]{
 						Value: newMessage,
 						Error: err,

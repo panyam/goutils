@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -75,10 +76,12 @@ func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, ctx S, config *WSCon
 	if config == nil {
 		config = DefaultWSConnConfig()
 	}
-	reader := conc.NewReader[I](func() (I, error, bool) {
+	reader := conc.NewReader[I](func() (I, error) {
 		res, err := ctx.ReadMessage(conn)
-		closed := websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNoStatusReceived, websocket.CloseAbnormalClosure)
-		return res, err, closed
+		if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNoStatusReceived, websocket.CloseAbnormalClosure) {
+			return res, net.ErrClosed
+		}
+		return res, err
 	})
 	defer reader.Stop()
 
