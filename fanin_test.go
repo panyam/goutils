@@ -81,7 +81,7 @@ func TestMultiReadFanInToFanOut(t *testing.T) {
 		return nil
 	})
 	fanout := NewFanOut[int](nil)
-	fanout.Add(writer.SendChan(), nil)
+	fanout.Add(writer.SendChan(), nil, false)
 
 	go func() {
 		for {
