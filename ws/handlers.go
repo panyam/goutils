@@ -166,6 +166,15 @@ func (j *JSONConn) Name() string {
 	return j.NameStr
 }
 
+func (j *JSONConn) DebugInfo() any {
+	return map[string]any{
+		"writer": j.Writer.DebugInfo(),
+		"Name":   j.NameStr,
+		"ConnId": j.ConnIdStr,
+		"PingId": j.PingId,
+	}
+}
+
 func (j *JSONConn) ConnId() string {
 	if j.ConnIdStr == "" {
 		j.ConnIdStr = gut.RandString(10, "")
