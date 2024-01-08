@@ -31,7 +31,8 @@ func (w *Writer[W]) DebugInfo() any {
 
 func (ch *Writer[T]) cleanup() {
 	log.Println("Cleaning up writer...")
-	defer log.Println("Finished cleaning up writer...")
+	v := ch.msgChannel
+	defer log.Println("Finished cleaning up writer: ", v)
 	close(ch.msgChannel)
 	ch.msgChannel = nil
 	ch.RunnerBase.cleanup()
@@ -64,7 +65,9 @@ func (wc *Writer[W]) start() {
 			select {
 			case newRequest := <-wc.msgChannel:
 				// Here we send a request to the server
+				// log.Println("Got a request to write: ", wc.SendChan(), newRequest)
 				err := wc.Write(newRequest)
+				// log.Println("Handled request to write: ", wc.SendChan(), newRequest)
 				if err != nil {
 					log.Println("Write Error: ", err)
 					return
@@ -72,7 +75,7 @@ func (wc *Writer[W]) start() {
 				break
 			case controlRequest := <-wc.controlChan:
 				// For now only a "kill" can be sent here
-				log.Println("Received kill signal.  Quitting Writer.", controlRequest)
+				log.Println("Received kill signal.  Quitting Writer.", controlRequest, wc.SendChan())
 				return
 			}
 		}
