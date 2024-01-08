@@ -10,7 +10,6 @@ import (
 )
 
 func TestFanOut(t *testing.T) {
-	log.Println("===================== TestFanOut =====================")
 	fanout := NewFanOut[int](nil)
 	var vals []int
 	var wg sync.WaitGroup
@@ -43,4 +42,11 @@ func TestFanOut(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		assert.Equal(t, vals[i], i/5, "Out vals dont match")
 	}
+}
+
+func TestFanOut_WithClose(t *testing.T) {
+	log.Println("===================== TestFanOutWithClose =====================")
+	var wg sync.WaitGroup
+	// fanout := NewFanOut[int](nil)
+	wg.Wait()
 }

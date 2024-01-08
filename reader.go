@@ -26,6 +26,13 @@ func NewReader[R any](read ReaderFunc[R]) *Reader[R] {
 	return &out
 }
 
+func (r *Reader[R]) DebugInfo() any {
+	return map[string]any{
+		"base":    r.RunnerBase.DebugInfo(),
+		"msgChan": r.msgChannel,
+	}
+}
+
 func (r *Reader[T]) cleanup() {
 	defer log.Println("Cleaned up reader...")
 	if r.OnDone != nil {

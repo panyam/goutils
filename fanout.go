@@ -43,6 +43,14 @@ func NewFanOut[T any](inputChan chan T) *FanOut[T] {
 	return out
 }
 
+func (fo *FanOut[T]) DebugInfo() any {
+	return map[string]any{
+		"inputChan":    fo.inputChan,
+		"outputChan":   fo.outputChans,
+		"outputChanSO": fo.outputSelfOwned,
+	}
+}
+
 func (fo *FanOut[T]) Count() int {
 	return len(fo.outputChans)
 }
@@ -119,7 +127,9 @@ func (fo *FanOut[T]) start() {
 			case cmd := <-fo.controlChan:
 				if cmd.Name == "stop" {
 					return
-				} else if cmd.Name == "add" {
+				}
+
+				if cmd.Name == "add" {
 					// Add a new reader to our list
 					// check for dup?
 					found := false
