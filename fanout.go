@@ -65,7 +65,7 @@ func (fo *FanOut[T]) Send(value T) {
 
 func (fo *FanOut[T]) New(filter FilterFunc[T]) chan T {
 	output := make(chan T, 1)
-	fo.Add(output, filter)
+	fo.Add(output, filter, false)
 	return output
 }
 
@@ -74,12 +74,20 @@ func (fo *FanOut[T]) New(filter FilterFunc[T]) chan T {
  * The filter method can be used to filter out message to certain
  * listeners if necessary.
  */
-func (fo *FanOut[T]) Add(output chan<- T, filter FilterFunc[T]) {
-	fo.controlChan <- FanOutCmd[T]{Name: "add", AddedChannel: output, Filter: filter}
+func (fo *FanOut[T]) Add(output chan<- T, filter FilterFunc[T], wait bool) (callbackChan chan error) {
+	if wait {
+		callbackChan = make(chan error, 1)
+	}
+	fo.controlChan <- FanOutCmd[T]{Name: "add", AddedChannel: output, Filter: filter, CallbackChan: callbackChan}
+	return
 }
 
-func (fo *FanOut[T]) Remove(output chan<- T, callbackChan chan error) {
+func (fo *FanOut[T]) Remove(output chan<- T, wait bool) (callbackChan chan error) {
+	if wait {
+		callbackChan = make(chan error)
+	}
 	fo.controlChan <- FanOutCmd[T]{Name: "remove", RemovedChannel: output, CallbackChan: callbackChan}
+	return
 }
 
 func (fo *FanOut[T]) cleanup() {
@@ -118,7 +126,9 @@ func (fo *FanOut[T]) start() {
 									outputChan <- *newevent
 								}
 							} else {
+								// log.Println("Sending Event to chan: ", event, outputChan)
 								outputChan <- event
+								// log.Println("Finished Sending Event to chan: ", event, outputChan)
 							}
 						}
 					}
@@ -148,6 +158,9 @@ func (fo *FanOut[T]) start() {
 						fo.outputChans = append(fo.outputChans, cmd.AddedChannel)
 						fo.outputSelfOwned = append(fo.outputSelfOwned, cmd.SelfOwned)
 						fo.outputFilters = append(fo.outputFilters, cmd.Filter)
+					}
+					if cmd.CallbackChan != nil {
+						cmd.CallbackChan <- nil
 					}
 				} else if cmd.Name == "remove" {
 					// Remove an existing reader from our list
