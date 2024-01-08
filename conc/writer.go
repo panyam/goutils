@@ -22,6 +22,13 @@ func NewWriter[W any](write WriterFunc[W]) *Writer[W] {
 	return &out
 }
 
+func (w *Writer[W]) DebugInfo() any {
+	return map[string]any{
+		"base":    w.RunnerBase.DebugInfo(),
+		"msgChan": w.msgChannel,
+	}
+}
+
 func (ch *Writer[T]) cleanup() {
 	log.Println("Cleaning up writer...")
 	defer log.Println("Finished cleaning up writer...")

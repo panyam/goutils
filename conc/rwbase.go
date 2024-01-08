@@ -19,6 +19,14 @@ func NewRunnerBase[C any](stopVal C) RunnerBase[C] {
 	}
 }
 
+func (r *RunnerBase[R]) DebugInfo() any {
+	return map[string]any{
+		"ctrlChan":  r.controlChan,
+		"stopVal":   r.stopVal,
+		"isRunning": r.isRunning,
+	}
+}
+
 func (r *RunnerBase[C]) IsRunning() bool {
 	return r.isRunning
 }
