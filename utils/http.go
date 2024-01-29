@@ -81,15 +81,17 @@ func NewRequest(method string, endpoint string, bodyReader io.Reader) (req *http
 	return
 }
 
-func Call(req *http.Request) (response interface{}, err error) {
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}
-	client := http.Client{
-		Timeout:   30 * time.Second,
-		Transport: transport,
+func Call(req *http.Request, client *http.Client) (response interface{}, err error) {
+	if client == nil {
+		transport := &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
+		client = &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: transport,
+		}
 	}
 
 	startTime := time.Now()
