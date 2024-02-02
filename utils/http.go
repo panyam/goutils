@@ -19,6 +19,59 @@ const (
 	ErrCodeEntityNotFound     = 404
 )
 
+var DefaultHttpClient *http.Client
+var LowQPSHttpClient *http.Client
+var MediumQPSHttpClient *http.Client
+var HighQPSHttpClient *http.Client
+
+func init() {
+	defaultTransport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	DefaultHttpClient = &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: defaultTransport,
+	}
+
+	lowQPSTransport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+		MaxIdleConns:        5,
+		MaxIdleConnsPerHost: 2,
+	}
+	LowQPSHttpClient = &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: lowQPSTransport,
+	}
+
+	mediumQPSTransport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 2,
+	}
+	MediumQPSHttpClient = &http.Client{
+		Timeout:   20 * time.Second,
+		Transport: mediumQPSTransport,
+	}
+
+	highQPSTransport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 5,
+	}
+	HighQPSHttpClient = &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: highQPSTransport,
+	}
+}
+
 func HTTPErrorCode(err error) int {
 	if err != nil {
 		switch e := err.(type) {
@@ -83,15 +136,7 @@ func NewRequest(method string, endpoint string, bodyReader io.Reader) (req *http
 
 func Call(req *http.Request, client *http.Client) (response interface{}, err error) {
 	if client == nil {
-		transport := &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		}
-		client = &http.Client{
-			Timeout:   30 * time.Second,
-			Transport: transport,
-		}
+		client = DefaultHttpClient
 	}
 
 	startTime := time.Now()
