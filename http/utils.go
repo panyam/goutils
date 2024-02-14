@@ -1,4 +1,4 @@
-package ws
+package http
 
 import (
 	"encoding/json"

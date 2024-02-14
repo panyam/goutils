@@ -1,4 +1,4 @@
-package utils
+package http
 
 import (
 	"bytes"
@@ -101,7 +101,7 @@ func MakeUrl(host, path string, args string) (url string) {
 	return url
 }
 
-func NewJsonRequest(method string, endpoint string, body StringMap) (req *http.Request, err error) {
+func NewJsonRequest(method string, endpoint string, body map[string]any) (req *http.Request, err error) {
 	var bodyBytes []byte
 	if body != nil {
 		bodyBytes, err = json.Marshal(body)
