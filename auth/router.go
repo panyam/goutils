@@ -16,6 +16,7 @@ type EnsureLoginConfig struct {
 	CallbackURLParam   string
 	DefaultRedirectURL string
 	GetRedirURL        func(ctx *gin.Context) string
+	SessionGetter      func(ctx *gin.Context, param string) any
 	UserParamName      string
 	NoLoginRedirect    bool
 }
@@ -45,11 +46,15 @@ func EnsureLogin(config *EnsureLoginConfig) RequestHandler {
 	if config.UserParamName == "" {
 		config.UserParamName = "loggedInUser"
 	}
+	if config.SessionGetter == nil {
+		config.SessionGetter = func(ctx *gin.Context, param string) any {
+			session := sessions.Default(ctx)
+			return session.Get(param)
+		}
+	}
 	return func(ctx *gin.Context) {
-		session := sessions.Default(ctx)
-		userParam := session.Get(config.UserParamName)
+		userParam := config.SessionGetter(ctx, config.UserParamName)
 		if userParam == "" || userParam == nil {
-			log.Println("No user Found: ", config.UserParamName, session)
 			// Redirect to a login if user not logged in
 			// `/${config.redirectURLPrefix || "auth"}/login?callbackURL=${encodeURIComponent(req.originalUrl)}`;
 			redirUrl := ""
