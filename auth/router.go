@@ -20,12 +20,9 @@ type AuthConfig struct {
 }
 
 /**
- * Redirects users to login screen of they are not logged in
- * @param req Request object
- * @param res Response object
- * @param next next function
+ * Ensures that config values have reasonable defaults.
  */
-func (a *AuthConfig) EnsureLogin(w http.ResponseWriter, r *http.Request) {
+func (a *AuthConfig) EnsureReasonableDefaults() {
 	if a.UserParamName == "" {
 		a.UserParamName = "loggedInUserId"
 	}
@@ -38,9 +35,41 @@ func (a *AuthConfig) EnsureLogin(w http.ResponseWriter, r *http.Request) {
 	if a.GetRedirURL == nil && !a.NoLoginRedirect {
 		a.GetRedirURL = func(r *http.Request) string { return a.DefaultRedirectURL }
 	}
-	if a.UserParamName == "" {
-		a.UserParamName = "loggedInUser"
+}
+
+func (a *AuthConfig) GetLoggedInUserId(r *http.Request, w http.ResponseWriter) string {
+	loggedInUserId := a.RequestVars.GetKey(r, "loggedInUser")
+	if loggedInUserId == "" || loggedInUserId == nil {
+		userParam := a.SessionGetter(r, w, a.UserParamName)
+		if userParam != "" && userParam != nil {
+			log.Println("Logged In User Id: ", loggedInUserId)
+			return userParam.(string)
+		}
 	}
+	log.Println("User not Logged In")
+	return ""
+}
+
+/**
+ * Extracts user info from the request and saves it into current user.
+ * Can be used by further middleware down the line to get the request's
+ * user info
+ */
+func (a *AuthConfig) ExtractUserInfo(w http.ResponseWriter, r *http.Request) {
+	userParam := a.SessionGetter(r, w, a.UserParamName)
+	if userParam != "" && userParam != nil {
+		a.RequestVars.SetKey(r, "loggedInUser", userParam)
+	}
+}
+
+/**
+ * Redirects users to login screen of they are not logged in
+ * @param req Request object
+ * @param res Response object
+ * @param next next function
+ */
+func (a *AuthConfig) EnsureLogin(w http.ResponseWriter, r *http.Request) {
+	a.EnsureReasonableDefaults()
 	userParam := a.SessionGetter(r, w, a.UserParamName)
 	if userParam == "" || userParam == nil {
 		// Redirect to a login if user not logged in
