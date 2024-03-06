@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/websocket"
 	"github.com/panyam/goutils/conc"
@@ -115,4 +116,17 @@ func WSConnJSONReaderWriter(conn *websocket.Conn) (reader *conc.Reader[gut.Strin
 		}
 	})
 	return
+}
+
+func NormalizeWsUrl(httpOrWsUrl string) string {
+	if strings.HasSuffix(httpOrWsUrl, "/") {
+		httpOrWsUrl = (httpOrWsUrl)[:len(httpOrWsUrl)-1]
+	}
+	if strings.HasPrefix(httpOrWsUrl, "http:") {
+		httpOrWsUrl = "ws:" + (httpOrWsUrl)[len("http:"):]
+	}
+	if strings.HasPrefix(httpOrWsUrl, "https:") {
+		httpOrWsUrl = "wss:" + (httpOrWsUrl)[len("https:"):]
+	}
+	return httpOrWsUrl
 }
