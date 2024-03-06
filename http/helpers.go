@@ -129,7 +129,6 @@ func NewRequest(method string, endpoint string, bodyReader io.Reader) (req *http
 	req, err = http.NewRequest(method, url, bodyReader)
 	if err == nil {
 		req.Header.Set("Content-Type", "application/json")
-		log.Printf("Request: '%s %s", method, url)
 	}
 	return
 }
@@ -139,20 +138,14 @@ func Call(req *http.Request, client *http.Client) (response interface{}, err err
 		client = DefaultHttpClient
 	}
 
-	startTime := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("client: error making http request: ", err)
 		return nil, err
 	}
-	endTime := time.Now()
 	respbody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
-	}
-	log.Printf("Response: %d in %f seconds", resp.StatusCode, (endTime.Sub(startTime)).Seconds())
-	if resp.StatusCode != 200 {
-		log.Println("Response Message: ", string(respbody))
 	}
 
 	if resp.StatusCode >= 400 {
