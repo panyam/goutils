@@ -39,7 +39,7 @@ func (m *Map[K, V]) Has(k K, lock bool) bool {
 	return exists
 }
 
-func (m *Map[K, V]) Get(k K) (V, bool) {
+func (m *Map[K, V]) Get(k K, lock bool) (V, bool) {
 	if lock {
 		m.rwmutex.RLock()
 		defer m.rwmutex.RUnlock()
