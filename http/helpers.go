@@ -39,8 +39,8 @@ func init() {
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
-		MaxIdleConns:        5,
-		MaxIdleConnsPerHost: 2,
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 5,
 	}
 	LowQPSHttpClient = &http.Client{
 		Timeout:   10 * time.Second,
@@ -51,8 +51,8 @@ func init() {
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
-		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 2,
+		MaxIdleConns:        20,
+		MaxIdleConnsPerHost: 10,
 	}
 	MediumQPSHttpClient = &http.Client{
 		Timeout:   20 * time.Second,
@@ -63,8 +63,8 @@ func init() {
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
-		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 5,
+		MaxIdleConns:        40,
+		MaxIdleConnsPerHost: 20,
 	}
 	HighQPSHttpClient = &http.Client{
 		Timeout:   30 * time.Second,
