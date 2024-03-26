@@ -1,7 +1,8 @@
 package utils
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 )
@@ -16,7 +17,7 @@ func GetEnvOrDefault(envvar string, defaultValue string, ensure bool) string {
 		out = defaultValue
 	}
 	if ensure && out == "" {
-		log.Fatalf("Env variable %s not found and deafult not given", envvar)
+		slog.Warn(fmt.Sprintf("Env variable %s not found and default not given", envvar))
 	}
 	return out
 }
