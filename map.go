@@ -35,6 +35,9 @@ func (m *Map[K, V]) LHas(k K, lock bool) bool {
 		m.rwmutex.RLock()
 		defer m.rwmutex.RUnlock()
 	}
+	if m.store == nil {
+		m.store = make(map[K]V)
+	}
 	_, exists := m.store[k]
 	return exists
 }
@@ -43,6 +46,9 @@ func (m *Map[K, V]) LGet(k K, lock bool) (V, bool) {
 	if lock {
 		m.rwmutex.RLock()
 		defer m.rwmutex.RUnlock()
+	}
+	if m.store == nil {
+		m.store = make(map[K]V)
 	}
 	out, ok := m.store[k]
 	return out, ok
@@ -53,6 +59,9 @@ func (m *Map[K, V]) LSet(k K, v V, lock bool) {
 		m.rwmutex.Lock()
 		defer m.rwmutex.Unlock()
 	}
+	if m.store == nil {
+		m.store = make(map[K]V)
+	}
 	m.store[k] = v
 }
 
@@ -61,6 +70,9 @@ func (m *Map[K, V]) LDelete(k K, lock bool) {
 		m.rwmutex.Lock()
 		defer m.rwmutex.Unlock()
 	}
+	if m.store == nil {
+		m.store = make(map[K]V)
+	}
 	delete(m.store, k)
 }
 
@@ -68,6 +80,9 @@ func (m *Map[K, V]) LRange(lock bool, meth func(K, V) bool) {
 	if lock {
 		m.rwmutex.RLock()
 		defer m.rwmutex.RUnlock()
+	}
+	if m.store == nil {
+		m.store = make(map[K]V)
 	}
 	for k, v := range m.store {
 		if !meth(k, v) {
@@ -78,12 +93,18 @@ func (m *Map[K, V]) LRange(lock bool, meth func(K, V) bool) {
 
 func (m *Map[K, V]) View(actions func()) {
 	m.rwmutex.RLock()
+	if m.store == nil {
+		m.store = make(map[K]V)
+	}
 	actions()
 	m.rwmutex.RUnlock()
 }
 
 func (m *Map[K, V]) Update(actions func(items map[K]V)) {
 	m.rwmutex.Lock()
+	if m.store == nil {
+		m.store = make(map[K]V)
+	}
 	actions(m.store)
 	m.rwmutex.Unlock()
 }
