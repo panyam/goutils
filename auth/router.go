@@ -39,15 +39,17 @@ func (a *AuthConfig) EnsureReasonableDefaults() {
 
 func (a *AuthConfig) GetLoggedInUserId(r *http.Request, w http.ResponseWriter) string {
 	loggedInUserId := a.RequestVars.GetKey(r, "loggedInUser")
+	log.Println("Getting Logged In User Id: ", loggedInUserId)
 	if loggedInUserId == "" || loggedInUserId == nil {
 		userParam := a.SessionGetter(r, w, a.UserParamName)
 		if userParam != "" && userParam != nil {
-			log.Println("Logged In User Id: ", loggedInUserId)
+			log.Println("Logged In User Id: ", userParam, loggedInUserId)
 			return userParam.(string)
+		} else {
+			return ""
 		}
 	}
-	log.Println("User not Logged In")
-	return ""
+	return loggedInUserId.(string)
 }
 
 /**
@@ -71,6 +73,7 @@ func (a *AuthConfig) ExtractUserInfo(w http.ResponseWriter, r *http.Request) {
 func (a *AuthConfig) EnsureLogin(w http.ResponseWriter, r *http.Request) {
 	a.EnsureReasonableDefaults()
 	userParam := a.SessionGetter(r, w, a.UserParamName)
+	log.Println("Here......33333")
 	if userParam == "" || userParam == nil {
 		// Redirect to a login if user not logged in
 		// `/${a.redirectURLPrefix || "auth"}/login?callbackURL=${encodeURIComponent(req.originalUrl)}`;
@@ -85,7 +88,7 @@ func (a *AuthConfig) EnsureLogin(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, fullRedirUrl, http.StatusFound)
 		} else {
 			// otherwise a 401
-			http.Error(w, "Failed", http.StatusUnauthorized)
+			http.Error(w, "Failed22222", http.StatusUnauthorized)
 		}
 	} else if a.RequestVars != nil {
 		log.Println("Setting Logged In User Id: ", userParam)
