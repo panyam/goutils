@@ -11,7 +11,7 @@ import (
 
 type AuthConfig struct {
 	RequestVars        *gohttp.RequestVarMap
-	SessionGetter      func(r *http.Request, w http.ResponseWriter, param string) any
+	SessionGetter      func(r *http.Request, param string) any
 	CallbackURLParam   string
 	DefaultRedirectURL string
 	GetRedirURL        func(r *http.Request) string
@@ -37,11 +37,11 @@ func (a *AuthConfig) EnsureReasonableDefaults() {
 	}
 }
 
-func (a *AuthConfig) GetLoggedInUserId(r *http.Request, w http.ResponseWriter) string {
+func (a *AuthConfig) GetLoggedInUserId(r *http.Request) string {
 	loggedInUserId := a.RequestVars.GetKey(r, "loggedInUser")
 	log.Println("Getting Logged In User Id: ", loggedInUserId)
 	if loggedInUserId == "" || loggedInUserId == nil {
-		userParam := a.SessionGetter(r, w, a.UserParamName)
+		userParam := a.SessionGetter(r, a.UserParamName)
 		if userParam != "" && userParam != nil {
 			log.Println("Logged In User Id: ", userParam, loggedInUserId)
 			return userParam.(string)
@@ -58,7 +58,7 @@ func (a *AuthConfig) GetLoggedInUserId(r *http.Request, w http.ResponseWriter) s
  * user info
  */
 func (a *AuthConfig) ExtractUserInfo(w http.ResponseWriter, r *http.Request) {
-	userParam := a.SessionGetter(r, w, a.UserParamName)
+	userParam := a.SessionGetter(r, a.UserParamName)
 	if userParam != "" && userParam != nil {
 		a.RequestVars.SetKey(r, "loggedInUser", userParam)
 	}
@@ -70,10 +70,19 @@ func (a *AuthConfig) ExtractUserInfo(w http.ResponseWriter, r *http.Request) {
  * @param res Response object
  * @param next next function
  */
-func (a *AuthConfig) EnsureLogin(w http.ResponseWriter, r *http.Request) {
+func (a *AuthConfig) EnsureLoginMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			if a.EnsureLogin(w, r) {
+				next.ServeHTTP(w, r)
+			}
+		},
+	)
+}
+
+func (a *AuthConfig) EnsureLogin(w http.ResponseWriter, r *http.Request) bool {
 	a.EnsureReasonableDefaults()
-	userParam := a.SessionGetter(r, w, a.UserParamName)
-	log.Println("Here......33333")
+	userParam := a.SessionGetter(r, a.UserParamName)
 	if userParam == "" || userParam == nil {
 		// Redirect to a login if user not logged in
 		// `/${a.redirectURLPrefix || "auth"}/login?callbackURL=${encodeURIComponent(req.originalUrl)}`;
@@ -88,11 +97,15 @@ func (a *AuthConfig) EnsureLogin(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, fullRedirUrl, http.StatusFound)
 		} else {
 			// otherwise a 401
-			http.Error(w, "Failed22222", http.StatusUnauthorized)
+			http.Error(w, "Login Failed", http.StatusUnauthorized)
 		}
 	} else if a.RequestVars != nil {
 		log.Println("Setting Logged In User Id: ", userParam)
 		// ctx.Set("loggedInUserId", userParam)
 		a.RequestVars.SetKey(r, "loggedInUser", userParam)
+		return true
+	} else {
+		http.Error(w, "ReqVarMap not set", http.StatusInternalServerError)
 	}
+	return false
 }
