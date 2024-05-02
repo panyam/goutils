@@ -13,11 +13,11 @@ var marshalOptions = protojson.MarshalOptions{
 	UseProtoNames:   true,
 }
 
-func ProtoFormat(msg protoreflect.ProtoMessage) string {
+func DefaultProtoFormat(msg protoreflect.ProtoMessage) string {
 	return marshalOptions.Format(msg)
 }
 
-func ProtoToJson(msg protoreflect.ProtoMessage) []byte {
+func DefaultProtoToJson(msg protoreflect.ProtoMessage) []byte {
 	if msg == nil {
 		panic(errors.New("Cnanot marshall nil"))
 	}
