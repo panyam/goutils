@@ -4,6 +4,13 @@ import (
 	"sync"
 )
 
+/**
+ * A method to insert an item at an index in a slice.
+ */
+func Insert[T any](list []T, item T, index int) []T {
+	return append(list[:index], append([]T{item}, list[index:]...)...)
+}
+
 func IndexOf[T any](items []T, matchfunc func(T) bool) int {
 	for index, item := range items {
 		if matchfunc(item) {

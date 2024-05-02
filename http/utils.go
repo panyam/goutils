@@ -2,10 +2,12 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -14,6 +16,18 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+func JsonToQueryString(json map[string]any) string {
+	out := ""
+	for key, value := range json {
+		if len(out) > 0 {
+			out += "&"
+		}
+		item := fmt.Sprintf("%s=%v", url.PathEscape(key), value.(interface{}))
+		out += item
+	}
+	return out
+}
 
 func SendJsonResponse(writer http.ResponseWriter, resp interface{}, err error) {
 	output := resp
