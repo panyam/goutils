@@ -2,10 +2,11 @@ package auth
 
 import (
 	"fmt"
-	"github.com/panyam/goutils/dal"
-	"github.com/panyam/goutils/utils"
 	"strings"
 	"time"
+
+	"github.com/panyam/goutils/dal"
+	"github.com/panyam/goutils/utils"
 )
 
 /**
@@ -55,32 +56,6 @@ func (id *Identity) HasKey() bool {
 func (id *Identity) Key() string {
 	return fmt.Sprintf("%s:%s", id.IdentityType, id.IdentityKey)
 }
-
-/**
- * Once a channel has verified an Identity, the end result is a mapping to
- * a local user object that is the entry for authenticated actions within
- * the system.  The User can also mean a user profile and can be extended
- * to be customized by the user of this library in their own specific app.
- */
-/*
-type User2 struct {
-	dal.BaseEntity
-
-	// A globally unique user ID.  This User ID cannot be used as a login key.
-	// Login's need to happen via the Identiites above and a username could be
-	// one of the identities (which can be verified say via login/password mechanism)
-	// Alternatively an email can be used as an identity that can also map to
-	// a particular user.
-	Id string
-
-	ProfileData utils.StringMap
-}
-
-// And others things here
-func (user *User2) HasKey() bool {
-	return strings.Trim(user.Id, " ") != ""
-}
-*/
 
 type AuthFlow struct {
 	dal.BaseEntity
