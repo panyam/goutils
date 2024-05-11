@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	gut "github.com/panyam/goutils/utils"
 )
 
 const (
@@ -186,7 +188,7 @@ func JsonGet(url string, onReq func(req *http.Request)) (interface{}, *http.Resp
 	if err != nil {
 		log.Println("Error reading body: ", string(body), err)
 	}
-	result, err = JsonDecodeBytes(body)
+	result, err = gut.JsonDecodeBytes(body)
 	if err != nil {
 		log.Println("Error decoding json: ", string(body), err)
 	}

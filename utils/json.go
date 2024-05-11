@@ -16,10 +16,6 @@ func JsonDecodeBytes(bytes []byte) (interface{}, error) {
 	return output, err
 }
 
-func JsonDecodeStr(str string) (interface{}, error) {
-	return JsonDecodeBytes([]byte(str))
-}
-
 func JsonReadFile(path string) (interface{}, error) {
 	contents, err := os.ReadFile(path)
 	if err != nil {
