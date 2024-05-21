@@ -17,6 +17,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Helper method to convert a map into a json query string
+//
+//		x := map[string]any{"a": 1, "b": 2}
+//	 	log.Println(JsonToQuery(x))
 func JsonToQueryString(json map[string]any) string {
 	out := ""
 	for key, value := range json {
