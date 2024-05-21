@@ -36,12 +36,12 @@ func SendJsonResponse(writer http.ResponseWriter, resp interface{}, err error) {
 		if er, ok := status.FromError(err); ok {
 			code := er.Code()
 			msg := er.Message()
-			output = gut.StringMap{
+			output = gut.StrMap{
 				"error":   code,
 				"message": msg,
 			}
 		} else {
-			output = gut.StringMap{
+			output = gut.StrMap{
 				"error": err.Error(),
 			}
 		}
@@ -109,15 +109,15 @@ func WSConnWriteMessage(wsConn *websocket.Conn, msg interface{}) error {
 	return outerr
 }
 
-func WSConnJSONReaderWriter(conn *websocket.Conn) (reader *conc.Reader[gut.StringMap], writer *conc.Writer[conc.Message[gut.StringMap]]) {
-	reader = conc.NewReader(func() (out gut.StringMap, err error) {
+func WSConnJSONReaderWriter(conn *websocket.Conn) (reader *conc.Reader[gut.StrMap], writer *conc.Writer[conc.Message[gut.StrMap]]) {
+	reader = conc.NewReader(func() (out gut.StrMap, err error) {
 		err = conn.ReadJSON(&out)
 		if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNoStatusReceived, websocket.CloseAbnormalClosure) {
 			err = net.ErrClosed
 		}
 		return
 	})
-	writer = conc.NewWriter(func(msg conc.Message[gut.StringMap]) error {
+	writer = conc.NewWriter(func(msg conc.Message[gut.StrMap]) error {
 		if msg.Error == io.EOF {
 			log.Println("Streamer closed...", msg.Error)
 			// do nothing

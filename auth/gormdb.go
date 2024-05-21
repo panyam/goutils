@@ -2,10 +2,11 @@ package auth
 
 import (
 	"errors"
-	"github.com/panyam/goutils/utils"
-	"gorm.io/gorm"
 	"log"
 	"time"
+
+	"github.com/panyam/goutils/utils"
+	"gorm.io/gorm"
 )
 
 type AuthDB struct {
@@ -43,14 +44,14 @@ func (adb *AuthDB) GetChannel(provider string, loginId string) (*Channel, error)
 	return &out, nil
 }
 
-func (adb *AuthDB) EnsureChannel(provider string, loginId string, params utils.StringMap) (*Channel, bool) {
+func (adb *AuthDB) EnsureChannel(provider string, loginId string, params utils.StrMap) (*Channel, bool) {
 	channel, _ := adb.GetChannel(provider, loginId)
 	newCreated := channel == nil
 	if channel == nil {
 		channel = NewChannel(provider, loginId, params)
 	}
-	channel.Credentials = params["credentials"].(utils.StringMap)
-	channel.Profile = params["profile"].(utils.StringMap)
+	channel.Credentials = params["credentials"].(utils.StrMap)
+	channel.Profile = params["profile"].(utils.StrMap)
 	if err := adb.SaveChannel(channel); err != nil {
 		log.Println("Error saving channel: ", err)
 	}
@@ -112,7 +113,7 @@ func (adb *AuthDB) SaveIdentity(entity *Identity) (err error) {
 	return
 }
 
-func (adb *AuthDB) EnsureIdentity(idType string, idKey string, params utils.StringMap) (*Identity, bool) {
+func (adb *AuthDB) EnsureIdentity(idType string, idKey string, params utils.StrMap) (*Identity, bool) {
 	identity, _ := adb.GetIdentity(idType, idKey)
 	newCreated := identity == nil
 	if identity == nil {

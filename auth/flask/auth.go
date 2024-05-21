@@ -33,7 +33,7 @@ func (f *FlaskAuth) NormalizedSecretKey() string {
  * Decodes the session cookie as it is stored by flask auth.
  * This has a few parts (and plugin points):
  */
-func (f *FlaskAuth) DecodeSessionCookie(base64value string) (out gut.StringMap, err error) {
+func (f *FlaskAuth) DecodeSessionCookie(base64value string) (out gut.StrMap, err error) {
 	decompress := base64value[0] == '.'
 	if decompress {
 		base64value = base64value[1:]
@@ -125,7 +125,7 @@ func (f *FlaskAuth) DecodeSessionUserId(userid string) (out []interface{}) {
 	return
 }
 
-func (f *FlaskAuth) ParseSignedCookieValue(value string) (parts []interface{}, sessmap gut.StringMap) {
+func (f *FlaskAuth) ParseSignedCookieValue(value string) (parts []interface{}, sessmap gut.StrMap) {
 	var err error
 	sessmap, err = f.DecodeSessionCookie(value)
 	if err != nil {

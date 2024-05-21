@@ -114,7 +114,7 @@ type Channel struct {
 	IdentityKey string
 }
 
-func NewChannel(provider string, loginId string, params utils.StringMap) *Channel {
+func NewChannel(provider string, loginId string, params utils.StrMap) *Channel {
 	out := Channel{
 		Provider: provider,
 		LoginId:  loginId,
@@ -150,7 +150,7 @@ type CallbackRequest struct {
 	rawBody string
 
 	// Headers for this request
-	Headers utils.StringMap
+	Headers utils.StrMap
 }
 
 func (c *CallbackRequest) FullURL() string {

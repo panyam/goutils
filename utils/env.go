@@ -7,10 +7,8 @@ import (
 	"strconv"
 )
 
-/**
- * Gets the value of an environment value and if it is missing returns the
- * default value.
- */
+// Gets the value of an environment value and if it is missing returns the
+// default value.
 func GetEnvOrDefault(envvar string, defaultValue string, ensure bool) string {
 	out := os.Getenv(envvar)
 	if out == "" {

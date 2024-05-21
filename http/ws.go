@@ -213,7 +213,7 @@ func (j *JSONConn) OnStart(conn *websocket.Conn) error {
  */
 func (j *JSONConn) SendPing() error {
 	j.PingId += 1
-	j.Writer.Send(conc.Message[any]{Value: gut.StringMap{
+	j.Writer.Send(conc.Message[any]{Value: gut.StrMap{
 		"type":   "ping",
 		"pingId": j.PingId,
 		"name":   j.Name(),

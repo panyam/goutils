@@ -6,7 +6,9 @@ import (
 	"strings"
 )
 
-func GetMapFieldForced(input StringMap, fieldPath interface{}) any {
+type StrMap = map[string]any
+
+func GetMapFieldForced(input StrMap, fieldPath interface{}) any {
 	if out, err := GetMapField(input, fieldPath); err != nil {
 		slog.Debug(err.Error())
 		return nil
@@ -15,7 +17,7 @@ func GetMapFieldForced(input StringMap, fieldPath interface{}) any {
 	}
 }
 
-func GetMapField(input StringMap, fieldPath interface{}) (any, error) {
+func GetMapField(input StrMap, fieldPath interface{}) (any, error) {
 	curr := input
 	var field_names []string
 	if _, ok := fieldPath.(string); ok {
@@ -30,7 +32,7 @@ func GetMapField(input StringMap, fieldPath interface{}) (any, error) {
 		} else if index == len(field_names)-1 {
 			return child, nil
 		}
-		if childmap, ok := curr[field_name].(StringMap); ok {
+		if childmap, ok := curr[field_name].(StrMap); ok {
 			curr = childmap
 		} else {
 			return nil, fmt.Errorf("field_path (%s) at index %d is not a map", strings.Join(field_names, "/"), index)
@@ -45,7 +47,7 @@ func GetMapField(input StringMap, fieldPath interface{}) (any, error) {
  * @param field_paths_and_values a list of field paths and values.  The field paths are strings separated by "/" and the values are the values to set
  * @return error if there is an error at the first fieldpath that failed.
  */
-func SetMapFields(input StringMap, field_paths_and_values ...interface{}) (StringMap, error) {
+func SetMapFields(input StrMap, field_paths_and_values ...interface{}) (StrMap, error) {
 	var err error
 	num_args := len(field_paths_and_values)
 	for i := 0; i < num_args; i += 2 {
@@ -62,9 +64,9 @@ func SetMapFields(input StringMap, field_paths_and_values ...interface{}) (Strin
 /**
  * Sets a map field at a given field path ensuring that everything until the leaf is a dictionary indeed.
  */
-func SetMapField(input StringMap, fieldPath interface{}, value interface{}) (StringMap, error) {
+func SetMapField(input StrMap, fieldPath interface{}, value interface{}) (StrMap, error) {
 	if input == nil {
-		input = make(StringMap)
+		input = make(StrMap)
 	}
 	var field_names []string
 	if _, ok := fieldPath.(string); ok {
@@ -79,9 +81,9 @@ func SetMapField(input StringMap, fieldPath interface{}, value interface{}) (Str
 		} else {
 			child := curr[field_name]
 			if child == nil {
-				curr[field_name] = make(StringMap)
+				curr[field_name] = make(StrMap)
 			}
-			if childmap, ok := curr[field_name].(StringMap); ok {
+			if childmap, ok := curr[field_name].(StrMap); ok {
 				curr = childmap
 			} else {
 				return input, fmt.Errorf("field_path (%s) at index %d is not a map", strings.Join(field_names, "/"), index)
@@ -96,7 +98,7 @@ func SetMapField(input StringMap, fieldPath interface{}, value interface{}) (Str
  * a. source field path is valid and exists
  * b. dest field path is valid (or needs to be created).
  */
-func CopyMapFields(input StringMap, output StringMap, field_paths ...interface{}) (StringMap, error) {
+func CopyMapFields(input StrMap, output StrMap, field_paths ...interface{}) (StrMap, error) {
 	num_args := len(field_paths)
 	for i := 0; i < num_args; i += 2 {
 		src_field_path := field_paths[i]
