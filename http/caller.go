@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
@@ -86,6 +85,7 @@ func HTTPErrorCode(err error) int {
 	return -1
 }
 
+// Representing HTTP specific errors
 type HTTPError struct {
 	Code    int
 	Message string
@@ -95,6 +95,7 @@ func (t *HTTPError) Error() string {
 	return fmt.Sprintf("Status: %d, Message: %s", t.Code, t.Message)
 }
 
+// Creates a URL on a host, path and with optional query parameters
 func MakeUrl(host, path string, args string) (url string) {
 	path = strings.TrimPrefix(path, "/")
 	url = fmt.Sprintf("%s/%s", host, path)
@@ -165,6 +166,9 @@ func Call(req *http.Request, client *http.Client) (response interface{}, err err
 	return response, err
 }
 
+// A simple wrapper for performing JSON Get requests.
+// The url is the full url once all query params have been added.
+// The onReq callback allows customization of the http requests before it is sent.
 func JsonGet(url string, onReq func(req *http.Request)) (interface{}, *http.Response, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -183,7 +187,7 @@ func JsonGet(url string, onReq func(req *http.Request)) (interface{}, *http.Resp
 	defer resp.Body.Close()
 	var result interface{}
 	var body []byte
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	// err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
 		log.Println("Error reading body: ", string(body), err)
