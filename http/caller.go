@@ -14,12 +14,14 @@ import (
 	gut "github.com/panyam/goutils/utils"
 )
 
+/*
 const (
-	ErrCodeInvalidRequest     = 400
-	ErrCodeInvalidCredentials = 401
-	ErrCodeAuthorized         = 403
-	ErrCodeEntityNotFound     = 404
+ErrCodeInvalidRequest     = 400
+ErrCodeInvalidCredentials = 401
+ErrCodeAuthorized         = 403
+ErrCodeEntityNotFound     = 404
 )
+*/
 
 var DefaultHttpClient *http.Client
 var LowQPSHttpClient *http.Client
@@ -105,6 +107,18 @@ func MakeUrl(host, path string, args string) (url string) {
 	return url
 }
 
+// Creates a new http request with the given method, endpoint and a bodyready that provides
+// the content the request body.
+func NewRequest(method string, endpoint string, bodyReader io.Reader) (req *http.Request, err error) {
+	url := endpoint // t.MakeUrl(endpoint, "")
+	req, err = http.NewRequest(method, url, bodyReader)
+	if err == nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return
+}
+
+// Wraps the NewRequest helper to create a request with the payload marshalled as JSON.
 func NewJsonRequest(method string, endpoint string, body map[string]any) (req *http.Request, err error) {
 	var bodyBytes []byte
 	if body != nil {
@@ -120,6 +134,7 @@ func NewJsonRequest(method string, endpoint string, body map[string]any) (req *h
 	return NewBytesRequest(method, endpoint, bodyBytes)
 }
 
+// Wraps the NewRequest helper to create request to set the body from a byte array.
 func NewBytesRequest(method string, endpoint string, body []byte) (req *http.Request, err error) {
 	var bodyReader io.Reader
 	if body != nil {
@@ -128,15 +143,10 @@ func NewBytesRequest(method string, endpoint string, body []byte) (req *http.Req
 	return NewRequest(method, endpoint, bodyReader)
 }
 
-func NewRequest(method string, endpoint string, bodyReader io.Reader) (req *http.Request, err error) {
-	url := endpoint // t.MakeUrl(endpoint, "")
-	req, err = http.NewRequest(method, url, bodyReader)
-	if err == nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	return
-}
-
+// Makes a http with the tiven request and the http client.  This is a wrapper over the
+// standard library caller that creates a Client (if not provided), performs the request
+// reads the entire body adn optionally converts the payload to an appropriate type
+// based on the response' Content-Type header (for now only application/json is supported.
 func Call(req *http.Request, client *http.Client) (response interface{}, err error) {
 	if client == nil {
 		client = DefaultHttpClient
