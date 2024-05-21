@@ -25,6 +25,9 @@ func init() {
 	}
 }
 
+// A simple utility that waits for a url to return a successful response
+// before proceeding.  This can be used for things like waiting for a database
+// or another service to become available before performing other activities.
 type URLWaiter struct {
 	Method             string
 	Url                string
@@ -37,6 +40,7 @@ type URLWaiter struct {
 	ValidateFunc func(req *http.Request, resp *http.Response) error
 }
 
+// Runs the "waiter"
 func (u *URLWaiter) Run() (success bool, iter int, err error) {
 	var req *http.Request
 	var resp any

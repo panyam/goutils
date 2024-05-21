@@ -15,20 +15,16 @@ import (
 
 type WSConn[I any] interface {
 	BiDirStreamConn[I]
-	/**
-	 * Reads the next message from the ws conn.
-	 */
+
+	// Reads the next message from the ws conn.
 	ReadMessage(w *websocket.Conn) (I, error)
-	/**
-	 * On created.
-	 */
+
+	// Callback to be called when the WS connection is started
 	OnStart(conn *websocket.Conn) error
 }
 
 type WSHandler[I any, S WSConn[I]] interface {
-	/**
-	 * Called to validate an http request to see if it is upgradeable to a ws conn
-	 */
+	// Called to validate an http request to see if it is upgradeable to a ws conn
 	Validate(w http.ResponseWriter, r *http.Request) (S, bool)
 }
 
@@ -68,7 +64,7 @@ func WSServe[I any, S WSConn[I]](h WSHandler[I, S], config *WSConnConfig) http.H
 		defer conn.Close()
 
 		slog.Debug("Start Handling Conn with: ", ctx)
-		WSHandleConn[I](conn, ctx, config)
+		WSHandleConn(conn, ctx, config)
 	}
 }
 
@@ -76,7 +72,7 @@ func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, ctx S, config *WSCon
 	if config == nil {
 		config = DefaultWSConnConfig()
 	}
-	reader := conc.NewReader[I](func() (I, error) {
+	reader := conc.NewReader(func() (I, error) {
 		res, err := ctx.ReadMessage(conn)
 		if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNoStatusReceived, websocket.CloseAbnormalClosure) {
 			return res, net.ErrClosed
@@ -182,9 +178,7 @@ func (j *JSONConn) ConnId() string {
 	return j.ConnIdStr
 }
 
-/**
- * Reads the next message from the ws conn.
- */
+// Reads the next message from the ws connection.
 func (j *JSONConn) ReadMessage(conn *websocket.Conn) (out any, err error) {
 	err = conn.ReadJSON(&out)
 	return
@@ -208,9 +202,7 @@ func (j *JSONConn) OnStart(conn *websocket.Conn) error {
 	return nil
 }
 
-/**
- * Called to send the next ping message.
- */
+// Called to send the next ping message.
 func (j *JSONConn) SendPing() error {
 	j.PingId += 1
 	j.Writer.Send(conc.Message[any]{Value: gut.StrMap{
@@ -222,9 +214,7 @@ func (j *JSONConn) SendPing() error {
 	return nil
 }
 
-/**
- * Called to handle the next message from the input stream on the ws conn.
- */
+// Called to handle the next message from the input stream on the ws conn.
 func (j *JSONConn) HandleMessage(msg any) error {
 	log.Println("Received Message: ", msg)
 	return nil
@@ -234,9 +224,7 @@ func (j *JSONConn) OnError(err error) error {
 	return err
 }
 
-/**
- * Called when the connection closes.
- */
+// Called when the connection closes.
 func (j *JSONConn) OnClose() {
 	// All the core hapens here
 	if j.Writer != nil {
