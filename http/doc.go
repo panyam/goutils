@@ -23,7 +23,7 @@ We want some extra properties from our Websockets like:
 
 Our websocket wrappers provide this and more.
 
-# Associate a wbsocket h
+Associate a wbsocket h
 
 First we want
 First
