@@ -13,6 +13,7 @@ import (
 	gut "github.com/panyam/goutils/utils"
 )
 
+// Represents a bidirectional websocket connection
 type WSConn[I any] interface {
 	BiDirStreamConn[I]
 
