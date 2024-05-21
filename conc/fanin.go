@@ -2,24 +2,19 @@ package conc
 
 import "log"
 
-type FanInCmd[T any] struct {
+type fanInCmd[T any] struct {
 	Name           string
 	AddedChannel   <-chan T
 	RemovedChannel <-chan T
 }
 
-type Input[T any] struct {
-	inchan <-chan T
-	pipe   *Pipe[T]
-}
-
 type FanIn[T any] struct {
-	RunnerBase[FanInCmd[T]]
+	RunnerBase[fanInCmd[T]]
 	// Called when a channel is removed so the caller can
 	// perform other cleanups etc based on this
 	OnChannelRemoved func(fi *FanIn[T], inchan <-chan T)
 
-	inputs     []Input[T]
+	inputs     []*Pipe[T]
 	selfOwnOut bool
 	outChan    chan T
 }
@@ -31,7 +26,7 @@ func NewFanIn[T any](outChan chan T) *FanIn[T] {
 		selfOwnOut = true
 	}
 	out := &FanIn[T]{
-		RunnerBase: NewRunnerBase(FanInCmd[T]{Name: "stop"}),
+		RunnerBase: NewRunnerBase(fanInCmd[T]{Name: "stop"}),
 		outChan:    outChan,
 		selfOwnOut: selfOwnOut,
 	}
@@ -48,15 +43,13 @@ func (fi *FanIn[T]) Add(inputs ...<-chan T) {
 		if input == nil {
 			panic("Cannot add nil channels")
 		}
-		fi.controlChan <- FanInCmd[T]{Name: "add", AddedChannel: input}
+		fi.controlChan <- fanInCmd[T]{Name: "add", AddedChannel: input}
 	}
 }
 
-/**
- * Remove an input channel from our monitor list.
- */
+// Remove an input channel from our monitor list.
 func (fi *FanIn[T]) Remove(target <-chan T) {
-	fi.controlChan <- FanInCmd[T]{Name: "remove", RemovedChannel: target}
+	fi.controlChan <- fanInCmd[T]{Name: "remove", RemovedChannel: target}
 }
 
 func (fi *FanIn[T]) Count() int {
@@ -65,7 +58,7 @@ func (fi *FanIn[T]) Count() int {
 
 func (fi *FanIn[T]) cleanup() {
 	for _, input := range fi.inputs {
-		input.pipe.Stop()
+		input.Stop()
 		fi.wg.Done()
 	}
 	fi.inputs = nil
@@ -87,12 +80,9 @@ func (fi *FanIn[T]) start() {
 			} else if cmd.Name == "add" {
 				// Add a new reader to our list
 				fi.wg.Add(1)
-				input := Input[T]{
-					pipe:   NewPipe(cmd.AddedChannel, fi.outChan),
-					inchan: cmd.AddedChannel,
-				}
+				input := NewPipe(cmd.AddedChannel, fi.outChan)
 				fi.inputs = append(fi.inputs, input)
-				input.pipe.OnDone = fi.pipeClosed
+				input.OnDone = fi.pipeClosed
 			} else if cmd.Name == "remove" {
 				// Remove an existing reader from our list
 				log.Println("Removing channel: ", cmd.RemovedChannel)
@@ -103,8 +93,8 @@ func (fi *FanIn[T]) start() {
 }
 
 func (fi *FanIn[T]) removeAt(index int) {
-	inchan := fi.inputs[index].inchan
-	fi.inputs[index].pipe.Stop()
+	inchan := fi.inputs[index].input
+	fi.inputs[index].Stop()
 	fi.inputs[index] = fi.inputs[len(fi.inputs)-1]
 	fi.inputs = fi.inputs[:len(fi.inputs)-1]
 	if fi.OnChannelRemoved != nil {
@@ -115,7 +105,7 @@ func (fi *FanIn[T]) removeAt(index int) {
 
 func (fi *FanIn[T]) pipeClosed(p *Pipe[T]) {
 	for index, input := range fi.inputs {
-		if input.pipe == p {
+		if input == p {
 			fi.removeAt(index)
 			break
 		}
@@ -124,7 +114,7 @@ func (fi *FanIn[T]) pipeClosed(p *Pipe[T]) {
 
 func (fi *FanIn[T]) remove(inchan <-chan T) {
 	for index, input := range fi.inputs {
-		if input.inchan == inchan {
+		if input.input == inchan {
 			fi.removeAt(index)
 			break
 		}

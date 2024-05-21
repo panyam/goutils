@@ -7,8 +7,11 @@ import (
 	"net"
 )
 
+// Type of the reader method used by the Reader goroutine primitive.
 type ReaderFunc[R any] func() (msg R, err error)
 
+// The typed Reader goroutine which calls a Read method to return data
+// over a channel.
 type Reader[R any] struct {
 	RunnerBase[string]
 	msgChannel chan Message[R]
@@ -16,6 +19,9 @@ type Reader[R any] struct {
 	OnDone     func(r *Reader[R])
 }
 
+// Creates a new reader instance.   Just like time.Ticker, this initializer
+// also starts the Reader loop.   It is upto the caller to Stop this reader when
+// done with.  Not doing so can risk the reader to run indefinitely.
 func NewReader[R any](read ReaderFunc[R]) *Reader[R] {
 	out := Reader[R]{
 		RunnerBase: NewRunnerBase("stop"),
@@ -33,20 +39,7 @@ func (r *Reader[R]) DebugInfo() any {
 	}
 }
 
-func (r *Reader[T]) cleanup() {
-	defer log.Println("Cleaned up reader...")
-	if r.OnDone != nil {
-		r.OnDone(r)
-	}
-	oldCh := r.msgChannel
-	r.msgChannel = nil
-	close(oldCh)
-	r.RunnerBase.cleanup()
-}
-
-/**
- * Returns the conn's reader channel.
- */
+// Returns the channel onwhich messages can be received.
 func (rc *Reader[R]) RecvChan() <-chan Message[R] {
 	return rc.msgChannel
 }
@@ -88,4 +81,15 @@ func (rc *Reader[R]) start() {
 			}
 		}
 	}()
+}
+
+func (r *Reader[T]) cleanup() {
+	defer log.Println("Cleaned up reader...")
+	if r.OnDone != nil {
+		r.OnDone(r)
+	}
+	oldCh := r.msgChannel
+	r.msgChannel = nil
+	close(oldCh)
+	r.RunnerBase.cleanup()
 }
