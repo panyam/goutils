@@ -29,6 +29,7 @@ type WSHandler[I any, S WSConn[I]] interface {
 	Validate(w http.ResponseWriter, r *http.Request) (S, bool)
 }
 
+// Basic configs for our WS including upgrader types and ping/pong timeouts
 type WSConnConfig struct {
 	*BiDirStreamConfig
 	Upgrader websocket.Upgrader

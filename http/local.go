@@ -2,6 +2,7 @@ package http
 
 import "net/http"
 
+// A very sample http handler func that disables CORS for local development.
 func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// fmt.Println(r.Header)
