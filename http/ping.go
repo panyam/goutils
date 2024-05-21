@@ -11,7 +11,6 @@ var urlPingHttpClient *http.Client
 
 func init() {
 	if urlPingHttpClient == nil {
-		log.Println("Initializing http client for url pinger....")
 		transport := &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
