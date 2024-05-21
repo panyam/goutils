@@ -136,6 +136,7 @@ func WSConnJSONReaderWriter(conn *websocket.Conn) (reader *conc.Reader[gut.StrMa
 	return
 }
 
+// Returns a normalized WS url equivalent for a given http url.
 func NormalizeWsUrl(httpOrWsUrl string) string {
 	if strings.HasSuffix(httpOrWsUrl, "/") {
 		httpOrWsUrl = (httpOrWsUrl)[:len(httpOrWsUrl)-1]

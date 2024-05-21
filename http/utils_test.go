@@ -9,3 +9,12 @@ func ExampleJsonToQueryString() {
 
 	// Output: a=1&b=2
 }
+
+func ExampleNormalizeWsUrl() {
+	fmt.Println(NormalizeWsUrl("http://google.com"))
+	fmt.Println(NormalizeWsUrl("https://github.com"))
+
+	// Output:
+	// ws://google.com
+	// wss://github.com
+}
