@@ -40,7 +40,13 @@ type URLWaiter struct {
 	ValidateFunc func(req *http.Request, resp *http.Response) error
 }
 
-// Runs the "waiter"
+// Runs the "waiter".
+//
+// Returns a tuple of:
+//
+//		success - whether the waited-upon eventually became active.
+//		iter    - How many iterations where run before a success/failure
+//	 	err     - Error encountered if the "wait" was a failure
 func (u *URLWaiter) Run() (success bool, iter int, err error) {
 	var req *http.Request
 	var resp any

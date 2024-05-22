@@ -24,17 +24,20 @@ type WSConn[I any] interface {
 	OnStart(conn *websocket.Conn) error
 }
 
+// Handlers validate a http request and decide whether they can/should be upgraded
+// to create and begin a websocket connection (WSConn)
 type WSHandler[I any, S WSConn[I]] interface {
 	// Called to validate an http request to see if it is upgradeable to a ws conn
 	Validate(w http.ResponseWriter, r *http.Request) (S, bool)
 }
 
-// Basic configs for our WS including upgrader types and ping/pong timeouts
+// Extends BiDirStreamConfig to include Websocket specific configrations
 type WSConnConfig struct {
 	*BiDirStreamConfig
 	Upgrader websocket.Upgrader
 }
 
+// This method creates a WSConnConfig with a default websocket Upgrader
 func DefaultWSConnConfig() *WSConnConfig {
 	return &WSConnConfig{
 		Upgrader: websocket.Upgrader{
@@ -46,12 +49,18 @@ func DefaultWSConnConfig() *WSConnConfig {
 	}
 }
 
-func WSServe[I any, S WSConn[I]](h WSHandler[I, S], config *WSConnConfig) http.HandlerFunc {
+// Returns a http.HandlerFunc that takes care of upgrading the request to a Websocket connection
+// and handling its lifecycle by delegating important activities to the WSHandler type
+// This method is often used to create a handler for particular routes on http routers.
+//
+// The handler parameter is responsible for validating (eg authenticating/authorizing) the request
+// to ensure an upgrade is allowed as well as handling messages received on the upgraded connection.
+func WSServe[I any, S WSConn[I]](handler WSHandler[I, S], config *WSConnConfig) http.HandlerFunc {
 	if config == nil {
 		config = DefaultWSConnConfig()
 	}
 	return func(rw http.ResponseWriter, req *http.Request) {
-		ctx, isValid := h.Validate(rw, req)
+		ctx, isValid := handler.Validate(rw, req)
 		if !isValid {
 			return
 		}
@@ -70,6 +79,9 @@ func WSServe[I any, S WSConn[I]](h WSHandler[I, S], config *WSConnConfig) http.H
 	}
 }
 
+// Once a websocket connection is established (either by the server or by the client),
+// this method handles the lifecycle of the connection by taking care of (healthceck) pings,
+// handling closures, handling received messages.
 func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, ctx S, config *WSConnConfig) {
 	if config == nil {
 		config = DefaultWSConnConfig()
@@ -142,21 +154,22 @@ func WSHandleConn[I any, S WSConn[I]](conn *websocket.Conn, ctx S, config *WSCon
 	}
 }
 
-type JSONHandler struct {
-}
-
-func (j *JSONHandler) Validate(w http.ResponseWriter, r *http.Request) (out WSConn[any], isValid bool) {
-	// All connections upgradeable
-	return &JSONConn{}, true
-}
-
+// An implementation of the WSConn interface that exchanges JSON message paylods
 type JSONConn struct {
-	Writer    *conc.Writer[conc.Message[any]]
-	NameStr   string
+	// The output writer as a channel to send outgoing messages on
+	Writer *conc.Writer[conc.Message[any]]
+
+	// Name of this connection (for clarity)
+	NameStr string
+
+	// A connection ID to identify this connection
 	ConnIdStr string
-	PingId    int64
+
+	// Keeps track of the current Ping count to send with the ping
+	PingId int64
 }
 
+// Gets the name of this connection
 func (j *JSONConn) Name() string {
 	if j.NameStr == "" {
 		j.NameStr = "JSONConn"
@@ -164,6 +177,7 @@ func (j *JSONConn) Name() string {
 	return j.NameStr
 }
 
+// Basic debug information.
 func (j *JSONConn) DebugInfo() any {
 	return map[string]any{
 		"writer": j.Writer.DebugInfo(),
@@ -173,6 +187,7 @@ func (j *JSONConn) DebugInfo() any {
 	}
 }
 
+// Returns the (possibly auto-generated) Connection Id
 func (j *JSONConn) ConnId() string {
 	if j.ConnIdStr == "" {
 		j.ConnIdStr = gut.RandString(10, "")
@@ -180,12 +195,14 @@ func (j *JSONConn) ConnId() string {
 	return j.ConnIdStr
 }
 
-// Reads the next message from the ws connection.
+// Reads the next message from the websocket connection as a JSON payload
 func (j *JSONConn) ReadMessage(conn *websocket.Conn) (out any, err error) {
 	err = conn.ReadJSON(&out)
 	return
 }
 
+// This (callback) method is called when the websocket connection is upgraded but before
+// the websocket event loop begins (in the WSHandleConn method)
 func (j *JSONConn) OnStart(conn *websocket.Conn) error {
 	log.Printf("Starting %s connection: %s", j.Name(), j.ConnId()) // E: e.connId undefined (type *HubConn has n…
 	j.Writer = conc.NewWriter(
@@ -235,6 +252,25 @@ func (j *JSONConn) OnClose() {
 	log.Printf("Closed %s connection: %s", j.Name(), j.ConnId()) // E: e.connId undefined (type *HubConn has n…
 }
 
+// Handle read timeouts.  By default returns true to disconnect and close on a timeout.
 func (j *JSONConn) OnTimeout() bool {
 	return true
 }
+
+type JSONHandler struct {
+}
+
+func (j *JSONHandler) Validate(w http.ResponseWriter, r *http.Request) (out WSConn[any], isValid bool) {
+	// All connections upgradeable
+	return &JSONConn{}, true
+}
+
+/*
+type DefaultWSHandler[I any] struct {
+}
+
+// Called to validate an http request to see if it is upgradeable to a ws conn
+func (d *DefaultWSHandler[I]) Validate(w http.ResponseWriter, r *http.Request) (WSConn[I], bool) {
+	return nil, true
+}
+*/

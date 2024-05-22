@@ -5,6 +5,7 @@ go 1.21
 require (
 	cloud.google.com/go/datastore v1.15.0
 	github.com/fernet/fernet-go v0.0.0-20211208181803-9f70042a33ee
+	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.0
 	github.com/stretchr/testify v1.8.3
 	google.golang.org/grpc v1.59.0
