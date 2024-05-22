@@ -1,6 +1,7 @@
 package conc
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"sort"
@@ -10,6 +11,50 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+func ExampleFanOut() {
+	// Create a fanout wiht 5 output channels and see that
+	// numbers sent into the output are read from all of these
+	fanout := NewFanOut[int](nil)
+	defer fanout.Stop()
+
+	NUM_CHANS := 2
+	NUM_MSGS := 3
+
+	// Add some receiver channels
+	var outchans []chan int
+	for i := 0; i < NUM_CHANS; i++ {
+		outchan := fanout.New(nil)
+		outchans = append(outchans, outchan)
+	}
+
+	for i := 0; i < NUM_MSGS; i++ {
+		go fanout.Send(i)
+	}
+
+	var vals []int
+	for i := 0; i < NUM_CHANS; i++ {
+		for j := 0; j < NUM_MSGS; j++ {
+			val := <-outchans[i]
+			vals = append(vals, val)
+		}
+	}
+
+	// sort and print them for testing
+	sort.Ints(vals)
+
+	for _, v := range vals {
+		fmt.Println(v)
+	}
+
+	// Output:
+	// 0
+	// 0
+	// 1
+	// 1
+	// 2
+	// 2
+}
 
 func TestFanOut(t *testing.T) {
 	fanout := NewFanOut[int](nil)

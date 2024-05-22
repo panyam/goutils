@@ -1,6 +1,7 @@
 package conc
 
 import (
+	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -8,6 +9,54 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+func ExampleFanIn() {
+	// Create 5 input channels and send 5 numbers into them
+	// the collector channel
+	fanin := NewFanIn[int](nil)
+	defer fanin.Stop()
+
+	NUM_CHANS := 2
+	NUM_MSGS := 3
+
+	var inchans []chan int
+	for i := 0; i < NUM_CHANS; i++ {
+		inchan := make(chan int)
+		inchans = append(inchans, inchan)
+		fanin.Add(inchan)
+	}
+
+	for i := 0; i < NUM_CHANS; i++ {
+		go func(inchan chan int) {
+			// send some  numbers into this fanin
+			for j := 0; j < NUM_MSGS; j++ {
+				inchan <- j
+			}
+		}(inchans[i])
+	}
+
+	// collect the fanned values
+	var vals []int
+	for i := 0; i < NUM_CHANS*NUM_MSGS; i++ {
+		val := <-fanin.RecvChan()
+		vals = append(vals, val)
+	}
+
+	// sort and print them for testing
+	sort.Ints(vals)
+
+	for _, v := range vals {
+		fmt.Println(v)
+	}
+
+	// Output:
+	// 0
+	// 0
+	// 1
+	// 1
+	// 2
+	// 2
+}
 
 func TestFanIn(t *testing.T) {
 	log.Println("===================== TestFanIn =====================")
