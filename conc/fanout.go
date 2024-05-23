@@ -20,6 +20,11 @@ type fanOutCmd[T any] struct {
 
 // FanOut takes a message from one chanel, applies a mapper function
 // and fans it out to N output channels.
+//
+// The general pattern is to:
+//  1. Create a FanOut[T] with the NewFanOut method
+//  2. Start a reader goroutine that reads values from fanout channels (note this SHOULD be started by any values are sent on the input channel)
+//  3. Start sending values through the input channel via the Send method.
 type FanOut[T any] struct {
 	RunnerBase[fanOutCmd[T]]
 	selfOwnIn       bool
@@ -27,6 +32,16 @@ type FanOut[T any] struct {
 	outputChans     []chan<- T
 	outputSelfOwned []bool
 	outputFilters   []FilterFunc[T]
+
+	// In the default mode, the Send method simply writes to an input channel that is read
+	// by the runner loop of this FanOut.  As soon as an event is read, it by default sequentially
+	// writes to all output channels.  If the output channels are not being drained by the reader
+	// goroutine (in 2 above) then the Send method will block.
+	// In other words, if the reader goroutine is NOT running before the Send method is invoked
+	// OR if the reader goroutine is blocked for some reason, then the Send method will block.
+	// To prevent this set the async flag to true in the Send method to true so that writes to
+	// the reader goroutines are themselves asynchronous and non blocking.
+	SendSync bool
 }
 
 // Creates a new typed FanOut runner.  Every FanOut needs an inputChan
@@ -93,7 +108,7 @@ func (fo *FanOut[T]) Add(output chan<- T, filter FilterFunc[T], wait bool) (call
 // Adds a new output channel with an optional filter function that will be managed by this runner.
 func (fo *FanOut[T]) New(filter FilterFunc[T]) chan T {
 	output := make(chan T, 1)
-	fo.Add(output, filter, false)
+	<-fo.Add(output, filter, true)
 	return output
 }
 
@@ -140,12 +155,20 @@ func (fo *FanOut[T]) start() {
 							if fo.outputFilters[index] != nil {
 								newevent := fo.outputFilters[index](&event)
 								if newevent != nil {
-									outputChan <- *newevent
+									if fo.SendSync {
+										outputChan <- *newevent
+									} else {
+										go func(outputChan chan<- T, evt T) { outputChan <- evt }(outputChan, *newevent)
+									}
 								}
 							} else {
-								// log.Println("Sending Event to chan: ", event, outputChan)
-								outputChan <- event
-								// log.Println("Finished Sending Event to chan: ", event, outputChan)
+								// log.Println("Sending Event to chan: ", index, event, outputChan)
+								if fo.SendSync {
+									outputChan <- event
+								} else {
+									go func(outputChan chan<- T, evt T) { outputChan <- evt }(outputChan, event)
+								}
+								// log.Println("Finished Sending Event to chan: ", index, event, outputChan)
 							}
 						}
 					}
