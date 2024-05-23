@@ -16,7 +16,7 @@ We want some extra properties from our Websockets like:
 
 Let us look at an example (available at cmd/timews/main.go).   We want to build a very simple websocket endpoint that sends out the current time periodically seconds to connected subscribers.   The subscribers can also publish a message that will be broadcast to all other connected subscribers (via a simple GET request).   We would need two endpoints for this:
 
-	- /subscribe:
+  - /subscribe:
     This endpoint lets a client connect to the websocket endpoint and subscribe to messages.
   - /publish:
     The publish endpoint is used by clients to broadcast an arbitrary message to all connected clients.
@@ -218,5 +218,4 @@ Just like in the server example create a WSConn type to handle the client side o
 	2024/05/22 22:20:16 Received Message To Handle:  2024-05-22 22:20:16.359953 -0700 PDT m=+44.002790543
 	```
 */
-
 package http
