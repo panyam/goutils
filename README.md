@@ -7,19 +7,27 @@ and formalized from Rob Pike's original lecture - https://go.dev/talks/2012/conc
 
 ### Reader
 
-A basic go-routine wrapper over a "reader" function.  The idea is that the callback will continuously call a reader method (eg reading json messages from a network stream) and passes onto a channel.
+A basic goroutine wrapper over a "reader" function that continuosly calls the reader function and sends read results into a channel.
 
 ### Writer
 
-Just like the reader but for serializing writes onto a writer callback method.
+Just like the reader but for serializing writes using a writer callback method.
+
+### Mapper
+
+A goroutine reads from an input channel, transforms (and/or filters) it and writes the result to an output channel.
+
+### Reducer
+
+A goroutine collects and reduces N values from an input channel, transforms it and writes the result to an output channel.
 
 ### Pipe
 
-A go-routine that connects a reader and a writer channel.
+A goroutine that connects a reader and a writer channel - a Mapper with the identity transform.
 
 ### Fan-In
 
-Implementation of the fan-in pattern where multiple receiver channels can be selected to feed into a target channel.
+Implementation of the fan-in pattern where multiple receiver channels can be fed into a target channel.
 
 ### Fan-Out
 
