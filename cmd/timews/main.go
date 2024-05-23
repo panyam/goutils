@@ -58,6 +58,13 @@ func (t *TimeConn) OnTimeout() bool {
 	return false
 }
 
+func (t *TimeConn) HandleMessage(msg any) error {
+	log.Println("Received Message To Handle: ", msg)
+	// sending to all listeners
+	t.handler.Fanout.Send(conc.Message[any]{Value: msg})
+	return nil
+}
+
 func main() {
 	r := mux.NewRouter()
 	timeHandler := NewTimeHandler()
