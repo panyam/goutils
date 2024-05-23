@@ -14,7 +14,7 @@ type FanIn[T any] struct {
 	// perform other cleanups etc based on this
 	OnChannelRemoved func(fi *FanIn[T], inchan <-chan T)
 
-	inputs     []*Pipe[T]
+	inputs     []*Mapper[T, T]
 	selfOwnOut bool
 	outChan    chan T
 }
@@ -103,7 +103,7 @@ func (fi *FanIn[T]) removeAt(index int) {
 	fi.wg.Done()
 }
 
-func (fi *FanIn[T]) pipeClosed(p *Pipe[T]) {
+func (fi *FanIn[T]) pipeClosed(p *Mapper[T, T]) {
 	for index, input := range fi.inputs {
 		if input == p {
 			fi.removeAt(index)
