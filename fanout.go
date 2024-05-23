@@ -41,6 +41,13 @@ type FanOut[T any] struct {
 	// OR if the reader goroutine is blocked for some reason, then the Send method will block.
 	// To prevent this set the async flag to true in the Send method to true so that writes to
 	// the reader goroutines are themselves asynchronous and non blocking.
+	//
+	// By setting this flag to true, writes to th output channels will happen synchronously without
+	// invoking a new goroutine.  This will help reduce number of goroutines kicked off during dispatch
+	// and is is an optimization if callers/owners of this FanOut want to exercise fine control over the
+	// reader channels and goroutines.  For example the caller might create buffered output channels so
+	// writes are blocked, or the caller themselves may be running the readers in seperate goroutines
+	// to prevent any blocking behavior.
 	SendSync bool
 }
 
