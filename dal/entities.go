@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/panyam/goutils/utils"
 )
 
@@ -22,7 +23,7 @@ func (j *JsonField) Scan(value interface{}) error {
 			return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))
 		}
 
-		res, err := utils.JsonDecodeStr(bytes)
+		res, err := utils.JsonDecodeBytes([]byte(bytes))
 		if err != nil {
 			return err
 		}
