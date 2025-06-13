@@ -3,8 +3,8 @@ Package http provides utilities for HTTP request handling and production-grade W
 
 This package contains two main areas of functionality:
 
-1. HTTP utilities for simplified request/response handling
-2. WebSocket abstractions built on Gorilla WebSocket for real-time applications
+ 1. HTTP utilities for simplified request/response handling
+ 2. WebSocket abstractions built on Gorilla WebSocket for real-time applications
 
 # WebSocket Framework
 
@@ -13,13 +13,13 @@ with automatic connection management, heartbeat detection, and lifecycle hooks.
 
 ## Key Features
 
-• Production-grade connection management with automatic heartbeat detection
-• Lifecycle hooks for connection start, close, timeout, and error handling
-• Thread-safe message broadcasting to multiple clients
-• Automatic ping-pong mechanism to prevent connection timeouts
-• Type-safe message handling with Go generics
-• Built-in JSON message support with JSONConn
-• Configurable timeouts and intervals for different deployment scenarios
+  - Production-grade connection management with automatic heartbeat detection
+  - Lifecycle hooks for connection start, close, timeout, and error handling
+  - Thread-safe message broadcasting to multiple clients
+  - Automatic ping-pong mechanism to prevent connection timeouts
+  - Type-safe message handling with Go generics
+  - Built-in JSON message support with JSONConn
+  - Configurable timeouts and intervals for different deployment scenarios
 
 ## Quick Start
 
@@ -297,13 +297,13 @@ The framework provides robust error handling:
 
 ## Best Practices
 
-• Always call parent OnStart/OnClose when embedding JSONConn
-• Implement proper authentication in the Validate method
-• Use connection limits to prevent resource exhaustion
-• Handle errors gracefully without crashing the server
-• Clean up resources properly in OnClose methods
-• Use mutexes for thread-safe operations on shared state
-• Monitor connection health with metrics
+  - Always call parent OnStart/OnClose when embedding JSONConn
+  - Implement proper authentication in the Validate method
+  - Use connection limits to prevent resource exhaustion
+  - Handle errors gracefully without crashing the server
+  - Clean up resources properly in OnClose methods
+  - Use mutexes for thread-safe operations on shared state
+  - Monitor connection health with metrics
 
 ## Common Patterns
 
@@ -373,11 +373,11 @@ WebSocket applications including authentication, load testing, and error scenari
 
 The package also provides utilities for HTTP request/response handling:
 
-• JsonToQueryString: Convert maps to URL query strings
-• SendJsonResponse: Send JSON responses with proper error handling
-• ErrorToHttpCode: Convert Go errors to appropriate HTTP status codes
-• WSConnWriteMessage/WSConnWriteError: WebSocket message writing utilities
-• NormalizeWsUrl: Convert HTTP URLs to WebSocket URLs
+  - JsonToQueryString: Convert maps to URL query strings
+  - SendJsonResponse: Send JSON responses with proper error handling
+  - ErrorToHttpCode: Convert Go errors to appropriate HTTP status codes
+  - WSConnWriteMessage/WSConnWriteError: WebSocket message writing utilities
+  - NormalizeWsUrl: Convert HTTP URLs to WebSocket URLs
 
 Example HTTP utility usage:
 
