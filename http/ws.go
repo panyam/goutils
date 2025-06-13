@@ -3,7 +3,6 @@ package http
 import (
 	"io"
 	"log"
-	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -74,7 +73,7 @@ func WSServe[I any, S WSConn[I]](handler WSHandler[I, S], config *WSConnConfig) 
 		}
 		defer conn.Close()
 
-		slog.Debug("Start Handling Conn with: ", ctx)
+		log.Println("Start Handling Conn with: ", ctx)
 		WSHandleConn(conn, ctx, config)
 	}
 }

@@ -147,7 +147,7 @@ func NewBytesRequest(method string, endpoint string, body []byte) (req *http.Req
 // standard library caller that creates a Client (if not provided), performs the request
 // reads the entire body adn optionally converts the payload to an appropriate type
 // based on the response' Content-Type header (for now only application/json is supported.
-func Call(req *http.Request, client *http.Client) (response interface{}, err error) {
+func Call(req *http.Request, client *http.Client) (response any, err error) {
 	if client == nil {
 		client = DefaultHttpClient
 	}
@@ -179,7 +179,7 @@ func Call(req *http.Request, client *http.Client) (response interface{}, err err
 // A simple wrapper for performing JSON Get requests.
 // The url is the full url once all query params have been added.
 // The onReq callback allows customization of the http requests before it is sent.
-func JsonGet(url string, onReq func(req *http.Request)) (interface{}, *http.Response, error) {
+func JsonGet(url string, onReq func(req *http.Request)) (any, *http.Response, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Fatalln(err)
@@ -195,7 +195,7 @@ func JsonGet(url string, onReq func(req *http.Request)) (interface{}, *http.Resp
 		return nil, resp, err
 	}
 	defer resp.Body.Close()
-	var result interface{}
+	var result any
 	var body []byte
 	body, err = io.ReadAll(resp.Body)
 	// err = json.NewDecoder(resp.Body).Decode(&result)

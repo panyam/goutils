@@ -1,221 +1,393 @@
 /*
-This package contains a few utilities to make it easier to make and send http requests and
-handle the http responses.  Another important part of this package is simple to use wrapper over Gorilla websockets so that both the client and server loops can be written in a uniform way.
+Package http provides utilities for HTTP request handling and production-grade WebSocket connections.
 
-# Utilities for uniform websocket server and clients handling
+This package contains two main areas of functionality:
 
-Gorilla websockets is an amazing package to bring websocket functionality to your application.  It is rather barebones (but extremely robust).
-We want some extra properties from our Websockets like:
+1. HTTP utilities for simplified request/response handling
+2. WebSocket abstractions built on Gorilla WebSocket for real-time applications
 
- 1. Typed messages
- 2. Customized pings/pongs with tuneable timeouts
- 3. Custom validation before upgrades to websocket
- 4. More
+# WebSocket Framework
 
-# A simple websocket example
+The WebSocket framework provides a production-ready abstraction over Gorilla WebSocket
+with automatic connection management, heartbeat detection, and lifecycle hooks.
 
-Let us look at an example (available at cmd/timews/main.go).   We want to build a very simple websocket endpoint that sends out the current time periodically seconds to connected subscribers.   The subscribers can also publish a message that will be broadcast to all other connected subscribers (via a simple GET request).   We would need two endpoints for this:
+## Key Features
 
-  - /subscribe:
-    This endpoint lets a client connect to the websocket endpoint and subscribe to messages.
-  - /publish:
-    The publish endpoint is used by clients to broadcast an arbitrary message to all connected clients.
+• Production-grade connection management with automatic heartbeat detection
+• Lifecycle hooks for connection start, close, timeout, and error handling
+• Thread-safe message broadcasting to multiple clients
+• Automatic ping-pong mechanism to prevent connection timeouts
+• Type-safe message handling with Go generics
+• Built-in JSON message support with JSONConn
+• Configurable timeouts and intervals for different deployment scenarios
 
-Let us start with the main function and setup these routes.  This example uses the gorilla mux router to obtain request variables but any library accepting http.Handler should do.
+## Quick Start
 
-	package main
-	import (
-		"fmt"
-		"log"
-		"net/http"
-		"github.com/gorilla/mux"
-		gohttp "github.com/github/goutils/http"
-	)
+The simplest way to create a WebSocket endpoint is using the built-in JSONConn:
 
-	func main() {
-		r := mux.NewRouter()
-
-		// Publish Handler
-		r.HandleFunc("/publish", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "Publishing Custom Message")
-		})
-
-		// Subscribe Handler
-		r.HandleFunc("/subscribe", func (w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "Subscribing to get time")
-		})
-
-		srv := http.Server{Handler: r}
-		log.Fatal(srv.ListenAndServe())
-	}
-
-Here the subscription is a normal http handler that returns a response.  However, we want this to be a websocket subscription handler.   So we need a couple helpers here:
-
-1. A WSConn type to handle the lifecycle of this connection:
-
-	// Our handler is the place to put all our "state" for this connection type
-	type TimeHandler struct {
-		// empty for now
-	}
-
-	// The Validate method gates the subscribe request to see if it should be upgraded
-	// and if so creates the right connection type to wrap the connection
-	// This examples allows all upgrades and is only needed to specify the kind of
-	// connection type to use - in this case TimeConn.
-	func (t *TimeHandler) Validate(w http.ResponseWriter, r *http.Request) (out *TimeConn, isValid bool) {
-		return &TimeConn{handler: t}, true
-	}
-
-	// Our TimeConn allows us to override any connection instance specific behaviours
-	type TimeConn struct {
-	  gohttp.JSONConn
-	  handler *TimeHandler
-	}
-
-We can now change our subscription http handler to:
-
-	timeHandler := NewTimeHandler()
-	r.HandleFunc("/subscribe", gohttp.WSServe(timeHandler, nil))
-
-Now that we have a basic structure, we will use a conc.FanOut type to keep track of the list
-of subscribers.  Update the TimeHandler to:
-
-	type TimeHandler struct {
-		Fanout *conc.FanOut[conc.Message[any]]
-	}
-
-	// ... along with a corresponding New method
-	func NewTimeHandler() *TimeHandler {
-		return &TimeHandler{Fanout: conc.NewFanOut[conc.Message[any]](nil)}
-	}
-
-The TimeHandler ensures that (in its Validate method) a new TimeConn is created to manage
-the connection lifecycle.  We will now register the TimeConn's "output" channel into the
-FanOut:
-
-	func (t *TimeConn) OnStart(conn *websocket.Conn) error {
-		t.JSONConn.OnStart(conn)
-		writer := t.JSONConn.Writer
-
-		log.Println("Got a new connection.....")
-		// Register the writer channel into the fanout
-		t.handler.Fanout.Add(writer.SendChan(), nil, false)
-		return nil
-	}
-
-Similarly when a connection closes we want to de-register its output channel from the fanout:
-
-	func (t *TimeConn) OnClose() {
-		writer := t.JSONConn.Writer
-
-		// Removal can be synchronous or asynchronous - we want to ensure it is done
-		// synchronously so another publish (if one came in) wont be attempted on a closed channel
-		<- t.handler.Fanout.Remove(writer.SendChan(), true)
-		t.JSONConn.OnClose()
-	}
-
-Optional but we will disable timeouts from disconnecting our connection as we do not want to implement any client side logic (yet):
-
-	func (t *TimeConn) OnTimeout() bool {
-		return false
-	}
-
-That's all there is.   Create a websocket connection to ws://localhost/subscribe.   Easiest way is to use the tool websocat (https://github.com/vi/websocat) and:
-
-	websocat ws://localhost/subscribe
-
-You will note that nothing is printed.  That is because nothing is being published.  Let us update our main method to send messages on the Fanout:
-
-	func main() {
-		r := mux.NewRouter()
-		timeHandler := NewTimeHandler()
-		r.HandleFunc("/publish", func(w http.ResponseWriter, r *http.Request) {
-			msg := r.URL.Query().Get("msg")
-			timeHandler.Fanout.Send(conc.Message[any]{Value: fmt.Sprintf("%s: %s", time.Now().String(), msg)})
-			fmt.Fprintf(w, "Published Message Successfully")
-		})
-
-		// Send the time every 1 second
-		go func() {
-			t := time.NewTicker(1 * time.Second)
-			defer t.Stop()
-			for {
-				<-t.C
-				timeHandler.Fanout.Send(conc.Message[any]{Value: time.Now().String()})
-			}
-		}()
-
-		r.HandleFunc("/subscribe", gohttp.WSServe(timeHandler, nil))
-		srv := http.Server{Handler: r}
-		log.Fatal(srv.ListenAndServe())
-	}
-
-We have also updated the /publish handler to send custom messages on the fanout.
-
-Now our subscriptions will show the time as well as custom publishes (curl http://localhost/publish?msg=YOUR_CUSTOM_MESSAGE)
-
-# Mesage reading example
-
-The above example was quite simplistic.   One immediate improvement is to also read messages from subscribers and broadcast them to all other subscribers.  This can be implemented with the HandleMessage method:
-
-	func (t *TimeConn) HandleMessage(msg any) error {
-		log.Println("Received Message To Handle: ", msg)
-		// sending to all listeners
-		t.handler.Fanout.Send(conc.Message[any]{Value: msg})
-		return nil
-	}
-
-Note that since the TimeConn type composes/extends the JSONConn type, messages of type JSON are automatically read by the JSONConn.
-
-# Custom Typed Messages
-
-Since TimeConn in the running example extended JSONConn, messages were implicitly read as JSON.   Not so implicitly!   WSConn interface offers a way to reading messages into any typed structure we desire.   See the ReadMessage method in the WSConn interface.
-
-# Detailed example - TBD
-
-# WS Client Example
-
-So far we have only seen the server side and used the websocat cli utility to subscribe.   Here we will write a simple client side utility to replace websocat and also test our server using the same helpers.
-
-1. Create a connection first
-
-	// create a (gorilla) websocker dialer
-	dialer := *websocket.DefaultDialer
-
-	// and dial - ignoring errors for now
-	conn, _, _ := dialer.Dial(u, header)
-
-2. Create a WSConn handler
-
-Just like in the server example create a WSConn type to handle the client side of the connection.  This will also be similar to our server side conn with minor differences:
-
-	type TimeClientConn struct {
+	type EchoConn struct {
 		gohttp.JSONConn
 	}
 
-	// Handle each message by just printing it
-	func (t *TimeClientConn) HandleMessage(msg any) error {
-		log.Println("Received Message To Handle: ", msg)
+	func (e *EchoConn) HandleMessage(msg any) error {
+		// Echo the message back to the client
+		e.Writer.Send(conc.Message[any]{Value: msg})
 		return nil
 	}
 
-3. Associate WSConn with websocket.Conn
+	type EchoHandler struct{}
 
-	var timeconn TimeClientConn
-	gohttp.WSHandleConn(conn, &timeconn, nil)
+	func (h *EchoHandler) Validate(w http.ResponseWriter, r *http.Request) (*EchoConn, bool) {
+		return &EchoConn{}, true // Accept all connections
+	}
 
-4. As you start the server (in cmd/timews/main.go) and the client (cmd/timewsclient/main.go) you will see the client handle the messages from the server like:
+	// Register with HTTP router
+	router.HandleFunc("/echo", gohttp.WSServe(&EchoHandler{}, nil))
 
-	```
-	2024/05/22 22:20:08 Starting JSONConn connection: lu2qgslo5e
-	2024/05/22 22:20:09 Received Message To Handle:  2024-05-22 22:20:09.360056 -0700 PDT m=+37.002593626
-	2024/05/22 22:20:10 Received Message To Handle:  2024-05-22 22:20:10.360081 -0700 PDT m=+38.002662293
-	2024/05/22 22:20:11 Received Message To Handle:  2024-05-22 22:20:11.359567 -0700 PDT m=+39.002191418
-	2024/05/22 22:20:12 Received Message To Handle:  2024-05-22 22:20:12.359239 -0700 PDT m=+40.001906418
-	2024/05/22 22:20:13 Received Message To Handle:  2024-05-22 22:20:13.359018 -0700 PDT m=+41.001728293
-	2024/05/22 22:20:14 Received Message To Handle:  2024-05-22 22:20:14.35917 -0700 PDT m=+42.001922418
-	2024/05/22 22:20:15 Received Message To Handle:  2024-05-22 22:20:15.359876 -0700 PDT m=+43.002670918
-	2024/05/22 22:20:16 Received Message To Handle:  2024-05-22 22:20:16.359953 -0700 PDT m=+44.002790543
-	```
+## Architecture
+
+The framework uses three main interfaces:
+
+### WSConn[I any]
+Represents a WebSocket connection that can handle typed messages:
+
+	type WSConn[I any] interface {
+		BiDirStreamConn[I]
+		ReadMessage(w *websocket.Conn) (I, error)
+		OnStart(conn *websocket.Conn) error
+	}
+
+### WSHandler[I any, S WSConn[I]]
+Validates HTTP requests and creates WebSocket connections:
+
+	type WSHandler[I any, S WSConn[I]] interface {
+		Validate(w http.ResponseWriter, r *http.Request) (S, bool)
+	}
+
+### BiDirStreamConn[I any]
+Provides lifecycle and message handling methods:
+
+	type BiDirStreamConn[I any] interface {
+		SendPing() error
+		Name() string
+		ConnId() string
+		HandleMessage(msg I) error
+		OnError(err error) error
+		OnClose()
+		OnTimeout() bool
+	}
+
+## Advanced Usage
+
+### Multi-user Chat Server
+
+	type ChatServer struct {
+		clients map[string]*ChatConn
+		rooms   map[string]*Room
+		mu      sync.RWMutex
+	}
+
+	type ChatConn struct {
+		gohttp.JSONConn
+		server   *ChatServer
+		username string
+		roomName string
+	}
+
+	func (c *ChatConn) OnStart(conn *websocket.Conn) error {
+		if err := c.JSONConn.OnStart(conn); err != nil {
+			return err
+		}
+
+		// Register with server
+		c.server.mu.Lock()
+		c.server.clients[c.ConnId()] = c
+		c.server.mu.Unlock()
+
+		return nil
+	}
+
+	func (c *ChatConn) HandleMessage(msg any) error {
+		msgMap := msg.(map[string]any)
+
+		switch msgMap["type"].(string) {
+		case "chat":
+			// Broadcast to all clients in room
+			c.server.broadcastToRoom(c.roomName, msgMap)
+		case "join_room":
+			// Switch rooms
+			c.joinRoom(msgMap["room"].(string))
+		}
+
+		return nil
+	}
+
+### Authentication and Authorization
+
+	type SecureConn struct {
+		gohttp.JSONConn
+		userID string
+		roles  []string
+	}
+
+	func (s *SecureConn) HandleMessage(msg any) error {
+		msgMap := msg.(map[string]any)
+		messageType := msgMap["type"].(string)
+
+		if !s.hasPermission(messageType) {
+			errorMsg := map[string]any{
+				"type":  "error",
+				"error": "Insufficient permissions",
+			}
+			s.Writer.Send(conc.Message[any]{Value: errorMsg})
+			return nil
+		}
+
+		// Process authorized message
+		return s.processMessage(msgMap)
+	}
+
+	type AuthHandler struct{}
+
+	func (h *AuthHandler) Validate(w http.ResponseWriter, r *http.Request) (*SecureConn, bool) {
+		token := r.Header.Get("Authorization")
+
+		// Validate JWT token
+		claims, err := validateJWT(token)
+		if err != nil {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return nil, false
+		}
+
+		return &SecureConn{
+			userID: claims["userID"].(string),
+			roles:  claims["roles"].([]string),
+		}, true
+	}
+
+### Custom Ping-Pong with Latency Tracking
+
+	type MonitoredConn struct {
+		gohttp.JSONConn
+		lastPingTime time.Time
+		pingCount    int64
+	}
+
+	func (m *MonitoredConn) SendPing() error {
+		m.pingCount++
+		m.lastPingTime = time.Now()
+
+		pingMsg := map[string]any{
+			"type":      "ping",
+			"pingId":    m.pingCount,
+			"timestamp": m.lastPingTime.Unix(),
+		}
+
+		m.Writer.Send(conc.Message[any]{Value: pingMsg})
+		return nil
+	}
+
+	func (m *MonitoredConn) HandleMessage(msg any) error {
+		msgMap := msg.(map[string]any)
+
+		if msgMap["type"].(string) == "pong" {
+			latency := time.Since(m.lastPingTime)
+			log.Printf("Ping-pong latency: %v", latency)
+		}
+
+		return nil
+	}
+
+## Configuration
+
+### Production Configuration
+
+	config := &gohttp.WSConnConfig{
+		BiDirStreamConfig: &gohttp.BiDirStreamConfig{
+			PingPeriod: time.Second * 30,  // Send ping every 30 seconds
+			PongPeriod: time.Second * 300, // Timeout after 5 minutes
+		},
+		Upgrader: websocket.Upgrader{
+			ReadBufferSize:  4096,
+			WriteBufferSize: 4096,
+			CheckOrigin: func(r *http.Request) bool {
+				// Implement proper origin checking
+				return isValidOrigin(r.Header.Get("Origin"))
+			},
+		},
+	}
+
+	router.HandleFunc("/ws", gohttp.WSServe(handler, config))
+
+### Development Configuration
+
+	config := gohttp.DefaultWSConnConfig()
+	config.PingPeriod = time.Second * 10  // Faster pings for development
+	config.PongPeriod = time.Second * 30  // Shorter timeout
+
+## Frontend Integration
+
+The framework is designed to work seamlessly with JavaScript WebSocket clients:
+
+	class WebSocketClient {
+		constructor(url) {
+			this.url = url;
+			this.ws = null;
+			this.pingInterval = null;
+		}
+
+		connect() {
+			this.ws = new WebSocket(this.url);
+
+			this.ws.onopen = () => {
+				this.startPingInterval();
+			};
+
+			this.ws.onmessage = (event) => {
+				const message = JSON.parse(event.data);
+				this.handleMessage(message);
+			};
+		}
+
+		handleMessage(message) {
+			switch (message.type) {
+				case 'ping':
+					// Respond to server ping
+					this.send({type: 'pong', pingId: message.pingId});
+					break;
+				default:
+					this.onMessage(message);
+			}
+		}
+
+		startPingInterval() {
+			this.pingInterval = setInterval(() => {
+				if (this.ws?.readyState === WebSocket.OPEN) {
+					this.send({type: 'ping', timestamp: Date.now()});
+				}
+			}, 25000);
+		}
+	}
+
+## Error Handling and Resilience
+
+The framework provides robust error handling:
+
+	type ResilientConn struct {
+		gohttp.JSONConn
+		errorCount int
+		maxErrors  int
+	}
+
+	func (r *ResilientConn) OnError(err error) error {
+		r.errorCount++
+		log.Printf("WebSocket error #%d: %v", r.errorCount, err)
+
+		if r.errorCount > r.maxErrors {
+			return err // Close connection after too many errors
+		}
+
+		return nil // Continue with connection
+	}
+
+	func (r *ResilientConn) OnTimeout() bool {
+		log.Printf("Connection timeout for %s", r.ConnId())
+		return true // Close the connection
+	}
+
+## Best Practices
+
+• Always call parent OnStart/OnClose when embedding JSONConn
+• Implement proper authentication in the Validate method
+• Use connection limits to prevent resource exhaustion
+• Handle errors gracefully without crashing the server
+• Clean up resources properly in OnClose methods
+• Use mutexes for thread-safe operations on shared state
+• Monitor connection health with metrics
+
+## Common Patterns
+
+### Hub Pattern for Broadcasting
+
+	type Hub struct {
+		clients    map[*Client]bool
+		broadcast  chan []byte
+		register   chan *Client
+		unregister chan *Client
+	}
+
+	func (h *Hub) run() {
+		for {
+			select {
+			case client := <-h.register:
+				h.clients[client] = true
+			case client := <-h.unregister:
+				delete(h.clients, client)
+			case message := <-h.broadcast:
+				for client := range h.clients {
+					client.send <- message
+				}
+			}
+		}
+	}
+
+### Room-based Messaging
+
+	type Room struct {
+		name    string
+		clients map[string]*Client
+		mu      sync.RWMutex
+	}
+
+	func (r *Room) Broadcast(message any, excludeId string) {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+
+		for id, client := range r.clients {
+			if id != excludeId {
+				client.Send(message)
+			}
+		}
+	}
+
+## Testing
+
+The package includes comprehensive test utilities for WebSocket testing:
+
+	// Create test server
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	// Create WebSocket client
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/endpoint"
+	conn, err := createTestClient(t, wsURL, nil)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer conn.Close()
+
+See the comprehensive test suite in ws2_test.go for complete examples of testing
+WebSocket applications including authentication, load testing, and error scenarios.
+
+# HTTP Utilities
+
+The package also provides utilities for HTTP request/response handling:
+
+• JsonToQueryString: Convert maps to URL query strings
+• SendJsonResponse: Send JSON responses with proper error handling
+• ErrorToHttpCode: Convert Go errors to appropriate HTTP status codes
+• WSConnWriteMessage/WSConnWriteError: WebSocket message writing utilities
+• NormalizeWsUrl: Convert HTTP URLs to WebSocket URLs
+
+Example HTTP utility usage:
+
+	func handleAPI(w http.ResponseWriter, r *http.Request) {
+		data, err := processRequest(r)
+		gohttp.SendJsonResponse(w, data, err)
+	}
+
+This comprehensive framework enables building production-ready real-time applications
+with WebSocket communication, from simple echo servers to complex multi-user systems
+with authentication, rooms, and advanced connection management.
 */
 package http

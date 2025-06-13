@@ -24,13 +24,13 @@ func JsonToQueryString(json map[string]any) string {
 		if len(out) > 0 {
 			out += "&"
 		}
-		item := fmt.Sprintf("%s=%v", url.PathEscape(key), value.(interface{}))
+		item := fmt.Sprintf("%s=%v", url.PathEscape(key), value.(any))
 		out += item
 	}
 	return out
 }
 
-func SendJsonResponse(writer http.ResponseWriter, resp interface{}, err error) {
+func SendJsonResponse(writer http.ResponseWriter, resp any, err error) {
 	output := resp
 	httpCode := ErrorToHttpCode(err)
 	if err != nil {
@@ -82,7 +82,7 @@ func WSConnWriteError(wsConn *websocket.Conn, err error) error {
 	if err != nil && err != io.EOF {
 		// Some kind of streamer rpc error
 		log.Println("Error reading message from streamer: ", err)
-		errdata := make(map[string]interface{})
+		errdata := make(map[string]any)
 		if er, ok := status.FromError(err); ok {
 			errdata["error"] = er.Code()
 		}
@@ -98,7 +98,7 @@ func WSConnWriteError(wsConn *websocket.Conn, err error) error {
 	return nil
 }
 
-func WSConnWriteMessage(wsConn *websocket.Conn, msg interface{}) error {
+func WSConnWriteMessage(wsConn *websocket.Conn, msg any) error {
 	jsonResp, err := json.Marshal(msg)
 	if err != nil {
 		log.Println("Error happened in JSON marshal. Err: ", err)
