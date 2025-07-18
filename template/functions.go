@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/panyam/goutils/utils"
 )
 
 func DefaultFuncMap() template.FuncMap {
@@ -19,6 +21,7 @@ func DefaultFuncMap() template.FuncMap {
 		"TypeOf":        reflect.TypeOf,
 		"ExpandAttrs":   ExpandAttrs,
 		"Slice":         SliceArray,
+		"ToJson":        utils.ToJson,
 		"AddInts":       AddNums[int],
 		"MultInts":      MultNums[int],
 		"SubInt":        SubNums[int],

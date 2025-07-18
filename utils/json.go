@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-func JsonDecodeBytes(bytes []byte) (interface{}, error) {
-	var output interface{} = nil
+func JsonDecodeBytes(bytes []byte) (any, error) {
+	var output any = nil
 	err := json.Unmarshal(bytes, &output)
 	if err != nil {
 		log.Fatal(err)
@@ -16,13 +16,13 @@ func JsonDecodeBytes(bytes []byte) (interface{}, error) {
 	return output, err
 }
 
-func JsonReadFile(path string) (interface{}, error) {
+func JsonReadFile(path string) (any, error) {
 	contents, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 	decoder := json.NewDecoder(strings.NewReader(string(contents)))
-	var json_data map[string]interface{}
+	var json_data map[string]any
 	err = decoder.Decode(&json_data)
 	if err != nil {
 		log.Fatal("Invalid error decoding json: ", err)
@@ -30,7 +30,7 @@ func JsonReadFile(path string) (interface{}, error) {
 	return json_data, err
 }
 
-func JsonWriteFile(data interface{}, path string, perm os.FileMode) error {
+func JsonWriteFile(data any, path string, perm os.FileMode) error {
 	encdata, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -41,4 +41,12 @@ func JsonWriteFile(data interface{}, path string, perm os.FileMode) error {
 		return err
 	}
 	return nil
+}
+
+func ToJson(v any) (string, any) {
+	jsonBytes, err := json.Marshal(v)
+	if err != nil {
+		return "invalid", err
+	}
+	return string(jsonBytes), nil
 }
