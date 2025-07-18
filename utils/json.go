@@ -43,7 +43,7 @@ func JsonWriteFile(data any, path string, perm os.FileMode) error {
 	return nil
 }
 
-func ToJson(v any) (string, any) {
+func ToJson(v any) (string, error) {
 	jsonBytes, err := json.Marshal(v)
 	if err != nil {
 		return "invalid", err
