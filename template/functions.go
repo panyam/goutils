@@ -30,6 +30,12 @@ func DefaultFuncMap() template.FuncMap {
 		"Int":           ToInt,
 		"Float":         ToFloat,
 		"IntList":       NumList[int],
+		"Modulo": func(v1, v2 int) (out int) {
+			return v1 % v2
+		},
+		"ModuloInt": func(v1, v2 int) (out int) {
+			return ToInt(v1) % ToInt(v2)
+		},
 		"Add": func(vals ...any) (out float64) {
 			for _, v := range vals {
 				out += ToFloat(v)
