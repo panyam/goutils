@@ -66,6 +66,7 @@ func DefaultFuncMap() template.FuncMap {
 		"Split":     strings.Split,
 		"HasPrefix": strings.HasPrefix,
 		"HasSuffix": strings.HasSuffix,
+		"Contains":  strings.Contains,
 		"Replace":   strings.Replace,
 		"Slugify":   Slugify,
 		"dict":      ValuesToDict,
