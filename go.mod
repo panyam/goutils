@@ -1,6 +1,6 @@
 module github.com/panyam/goutils
 
-go 1.21
+go 1.24
 
 require (
 	cloud.google.com/go/datastore v1.15.0

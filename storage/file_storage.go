@@ -166,7 +166,7 @@ func (f *FileStorage) SaveArtifact(id string, name string, m proto.Message) erro
 func (f *FileStorage) AtomicSaveArtifact(id string, name string, m proto.Message) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	
+
 	entityDir := f.getEntityDir(id)
 	if err := os.MkdirAll(entityDir, 0755); err != nil {
 		return fmt.Errorf("failed to create entity directory %s: %w", entityDir, err)
@@ -184,12 +184,12 @@ func (f *FileStorage) AtomicSaveArtifact(id string, name string, m proto.Message
 
 	artifactPath := f.getArtifactPath(id, name)
 	tmpPath := artifactPath + ".tmp"
-	
+
 	// Write to temp file first
 	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write temp file for entity %s: %w", id, err)
 	}
-	
+
 	// Atomic rename
 	if err := os.Rename(tmpPath, artifactPath); err != nil {
 		os.Remove(tmpPath) // Clean up temp file
@@ -203,18 +203,18 @@ func (f *FileStorage) AtomicSaveArtifact(id string, name string, m proto.Message
 func (f *FileStorage) AtomicUpdate(id string, name string, updateFn func(proto.Message) error, msgType proto.Message) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	
+
 	// Load current artifact
 	err := f.LoadArtifact(id, name, msgType)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to load artifact: %w", err)
 	}
-	
+
 	// Apply update
 	if err := updateFn(msgType); err != nil {
 		return err // Don't save if update fails
 	}
-	
+
 	// Save atomically (we're already holding the lock)
 	entityDir := f.getEntityDir(id)
 	if err := os.MkdirAll(entityDir, 0755); err != nil {
@@ -233,12 +233,12 @@ func (f *FileStorage) AtomicUpdate(id string, name string, updateFn func(proto.M
 
 	artifactPath := f.getArtifactPath(id, name)
 	tmpPath := artifactPath + ".tmp"
-	
+
 	// Write to temp file first
 	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write temp file for entity %s: %w", id, err)
 	}
-	
+
 	// Atomic rename
 	if err := os.Rename(tmpPath, artifactPath); err != nil {
 		os.Remove(tmpPath) // Clean up temp file
