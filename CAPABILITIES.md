@@ -9,6 +9,8 @@
 - thread-safe-map: Map with read/write transactions
 - batch-reduction: Customizable reducers with batch collection
 - channel-lifecycle: Built-in channel-based goroutine lifecycle management
+- memfs: concurrency-safe in-memory fs.FS with os-style writes (WriteFile, MkdirAll, Remove, Rename)
+- mountfs: composes named fs.FS values into one fs.FS whose top-level directories are the mounts
 
 ## Module
 github.com/panyam/goutils
@@ -33,6 +35,8 @@ replace github.com/panyam/goutils => ~/newstack/goutils/master
 ### Key Imports
 ```go
 import "github.com/panyam/goutils/conc"
+import "github.com/panyam/goutils/memfs"
+import "github.com/panyam/goutils/mountfs"
 ```
 
 ## Status

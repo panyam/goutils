@@ -1,0 +1,24 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # experimental/gae does not build against the current grpc; see the issue linked in the PR.
+      - name: Test
+        run: go test -race $(go list ./... | grep -v /experimental/gae)
+
+      - name: Test the filesystem packages as wasm under Node
+        run: PATH="$(go env GOROOT)/lib/wasm:$PATH" GOOS=js GOARCH=wasm go test ./memfs ./mountfs
