@@ -137,6 +137,25 @@ func (r *FS) Stat(name string) (fs.FileInfo, error) {
 	return fs.Stat(fsys, rest)
 }
 
+// ContentSum asks the mount that holds name for the file's content sum, when that mount's fs.FS has
+// a ContentSum method of the same signature, as a store that keeps its files by hash does. sum names
+// the contents, such as "sha256:<hex>", and size is their length. ok is false when the mount has no
+// such method, the path is in no mount, or the mount doesn't know the file. A caller that
+// fingerprints files can then take the sum rather than read the file, through the composed tree.
+func (r *FS) ContentSum(name string) (sum string, size int64, ok bool) {
+	fsys, rest, err := r.split("sum", name)
+	if err != nil {
+		return "", 0, false
+	}
+	s, has := fsys.(interface {
+		ContentSum(string) (string, int64, bool)
+	})
+	if !has {
+		return "", 0, false
+	}
+	return s.ContentSum(rest)
+}
+
 // split takes "mount/rest" apart, with rest "." for the mount's own root.
 func (r *FS) split(op, name string) (fs.FS, string, error) {
 	if !fs.ValidPath(name) {
