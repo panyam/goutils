@@ -26,7 +26,7 @@ None
 ### Go Module
 ```go
 // go.mod
-require github.com/panyam/goutils v0.1.14
+require github.com/panyam/goutils v0.1.15
 
 // Local development
 replace github.com/panyam/goutils => ~/newstack/goutils/master

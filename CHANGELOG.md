@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Releases before v0.1.14 were
 tag-only and are not back-filled.
 
+## [v0.1.15] - 2026-11-19
+
+### Added
+
+- `mountfs`: `FS.ContentSum` asks the mount that holds a file for its content sum, when that
+  mount's `fs.FS` has a `ContentSum(name) (sum string, size int64, ok bool)` method, as a store
+  that keeps its files by hash does. A caller that fingerprints files takes the sum rather than
+  reading the file, through the composed tree. agni's wasm engine needs it to replace its own copy
+  of `mountfs` (panyam/agni#1761).
+
 ## [v0.1.14] - 2026-10-03
 
 ### Added

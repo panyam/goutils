@@ -168,3 +168,30 @@ func TestConcurrentMountsAndReads(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+// summed is an fs.FS that knows its files' content sums, as a store keeping files by hash does.
+type summed struct {
+	fstest.MapFS
+	sums map[string]string
+}
+
+func (s summed) ContentSum(name string) (string, int64, bool) {
+	sum, ok := s.sums[name]
+	if !ok {
+		return "", 0, false
+	}
+	return sum, int64(len(s.MapFS[name].Data)), true
+}
+
+func TestContentSumAsksTheMountThatHoldsTheFile(t *testing.T) {
+	store := summed{MapFS: mapFS(map[string]string{"a/b.txt": "hello"}), sums: map[string]string{"a/b.txt": "sha256:abc"}}
+	r := New(Mount{Name: "store", FS: store}, Mount{Name: "plain", FS: mapFS(map[string]string{"x.txt": "x"})})
+	if sum, size, ok := r.ContentSum("store/a/b.txt"); !ok || sum != "sha256:abc" || size != 5 {
+		t.Errorf("ContentSum(store/a/b.txt) = %q, %d, %v; want the store's sum and size", sum, size, ok)
+	}
+	for _, name := range []string{"store/a/missing.txt", "plain/x.txt", "nowhere/x.txt", "../x"} {
+		if _, _, ok := r.ContentSum(name); ok {
+			t.Errorf("ContentSum(%s) = ok; want false", name)
+		}
+	}
+}
