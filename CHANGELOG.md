@@ -5,6 +5,22 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Releases before v0.1.14 were
 tag-only and are not back-filled.
 
+## [Unreleased]
+
+### Removed
+
+- `experimental/gae`, the Datastore helper. It didn't build against grpc 1.82, CI skipped it, and
+  nothing imports it (#6, #3). Its removal drops cloud.google.com/go, google.golang.org/api and the
+  rest of the Google Cloud modules from goutils's requires.
+- `grpc`, the `ErrorLogger` interceptor and the protojson marshaller. Nothing imports them, and they
+  were the only reason goutils required grpc (#6).
+
+### Changed
+
+- `go 1.26.0` is the floor for importers, and goutils builds on `toolchain go1.27.4`.
+- A weekly workflow scans for known vulnerabilities through `panyam/ci-actions/vulncheck`
+  (panyam/ci-actions#11).
+
 ## [v0.1.15] - 2026-11-19
 
 ### Added

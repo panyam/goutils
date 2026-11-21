@@ -1,7 +1,7 @@
 # goutils
 
 ## Version
-0.1.14
+0.1.15
 
 ## Provides
 - concurrency-utilities: Reader, Writer, Mapper, Reducer with generics
