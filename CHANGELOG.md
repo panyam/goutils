@@ -5,7 +5,7 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/). Releases before v0.1.14 were
 tag-only and are not back-filled.
 
-## [Unreleased]
+## [v0.1.16] - 2026-11-21
 
 ### Removed
 

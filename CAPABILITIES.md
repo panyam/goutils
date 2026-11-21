@@ -1,7 +1,7 @@
 # goutils
 
 ## Version
-0.1.15
+0.1.16
 
 ## Provides
 - concurrency-utilities: Reader, Writer, Mapper, Reducer with generics
@@ -26,7 +26,7 @@ None
 ### Go Module
 ```go
 // go.mod
-require github.com/panyam/goutils v0.1.15
+require github.com/panyam/goutils v0.1.16
 
 // Local development
 replace github.com/panyam/goutils => ~/newstack/goutils/master
